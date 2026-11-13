@@ -353,7 +353,7 @@ const server = createServer(async (req, res) => {
         for await(const chunk of req) {size+=chunk.length;if(size>2048)return send(res,413,'Request too large');chunks.push(chunk);}
         const values=new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
         const email=(values.get('email')||'').trim().toLowerCase(),language=values.get('language');
-        if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length>254 ||
+        if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length>254 ||
            !['en','de','pt-PT'].includes(language) || values.get('consent')!=='yes')
           return send(res,400,page('Check your details','<p>Please provide a valid email, language and consent.</p><p><a href="/early-access">Try again</a></p>'));
         await pool.query(`INSERT INTO aom_launch_interest(email,language) VALUES($1,$2)
