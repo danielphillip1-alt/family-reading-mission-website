@@ -34,7 +34,7 @@ const files = new Map([
   ['/authors-on-a-mission-logo.png', ['authors-on-a-mission-logo.png', 'image/png']],
 ]);
 
-if (pool) await pool.query(`
+const startupMigrations = pool ? pool.query(`
   CREATE TABLE IF NOT EXISTS members (
     id uuid PRIMARY KEY,
     email text UNIQUE NOT NULL,
@@ -180,7 +180,10 @@ if (pool) await pool.query(`
     member_id uuid NOT NULL REFERENCES members(id),
     expires_at timestamptz NOT NULL
   );
-`);
+`).then(() => { schemaReady = true; console.log('Member database schema initialized'); })
+  .catch(error => { console.error('Member database migration error', error?.code || error?.message); }) : Promise.resolve();
+let schemaReady = !pool;
+setTimeout(() => { if (!schemaReady) console.error('Member database initialization is still pending'); }, 30000).unref();
 
 async function publishedBookReady() {
   if (!pool) return false;
@@ -398,6 +401,8 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, appUrl);
     const { pathname } = url;
+    if (!schemaReady && pathname !== '/health' && pathname !== '/ready')
+      return send(res, 503, 'Member database is initializing. Please retry shortly.', 'text/plain');
     if (pathname === '/stripe/webhook' && req.method === 'POST') {
       return handleStripeWebhook({req,res,stripe,pool,secret:process.env.STRIPE_WEBHOOK_SECRET});
     }
