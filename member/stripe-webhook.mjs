@@ -51,6 +51,17 @@ export async function handleStripeWebhook({req,res,stripe,pool,secret}) {
           VALUES($1,$2,$3,$4,$5,$6,now()) ON CONFLICT(stripe_subscription_id) DO UPDATE SET
           status=excluded.status,current_period_end=excluded.current_period_end,cancel_at_period_end=excluded.cancel_at_period_end,updated_at=now()`,
           [subscription.id,member.id,customerId,subscription.status,period?new Date(period*1000):null,Boolean(subscription.cancel_at_period_end)]);
+        if(['active','trialing'].includes(subscription.status) && period && period*1000>Date.now()){
+          await client.query(`INSERT INTO aom_delivery_outbox(id,release_id,member_id,kind,language)
+            SELECT gen_random_uuid(),r.id,m.id,'welcome',m.preferred_language
+              FROM members m CROSS JOIN LATERAL(
+                SELECT r.id FROM aom_releases r JOIN aom_release_editions e
+                  ON e.release_id=r.id AND e.language=m.preferred_language
+                WHERE r.status='published' AND r.published_at<=now()
+                  AND e.approved_at IS NOT NULL ORDER BY r.published_at DESC LIMIT 1
+              ) r WHERE m.id=$1
+              ON CONFLICT(release_id,member_id,kind) DO NOTHING`,[member.id]);
+        }
       }
     }
     await client.query('COMMIT');
