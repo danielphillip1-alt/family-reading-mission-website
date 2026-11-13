@@ -93,6 +93,27 @@ if (pool) await pool.query(`
     UNIQUE (release_id,member_id,kind)
   );
   CREATE INDEX IF NOT EXISTS aom_delivery_pending_idx ON aom_delivery_outbox(state,next_attempt_at);
+  CREATE TABLE IF NOT EXISTS aom_direct_subscriptions (
+    stripe_subscription_id text PRIMARY KEY,
+    stripe_customer_id text NOT NULL,
+    email text NOT NULL,
+    language text NOT NULL CHECK(language IN ('en','de','pt-PT')),
+    status text NOT NULL,
+    current_period_end timestamptz,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE TABLE IF NOT EXISTS aom_direct_delivery_outbox (
+    id uuid PRIMARY KEY,
+    stripe_subscription_id text NOT NULL REFERENCES aom_direct_subscriptions(stripe_subscription_id),
+    release_id uuid NOT NULL REFERENCES aom_releases(id),
+    language text NOT NULL,
+    state text NOT NULL DEFAULT 'pending',
+    attempts integer NOT NULL DEFAULT 0,
+    next_attempt_at timestamptz NOT NULL DEFAULT now(),
+    provider_message_id text,
+    UNIQUE(stripe_subscription_id,release_id)
+  );
+  CREATE INDEX IF NOT EXISTS aom_direct_delivery_pending_idx ON aom_direct_delivery_outbox(state,next_attempt_at);
   CREATE TABLE IF NOT EXISTS aom_launch_interest (
     email text PRIMARY KEY,
     language text NOT NULL DEFAULT 'en',
