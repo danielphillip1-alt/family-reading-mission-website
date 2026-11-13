@@ -103,6 +103,24 @@ if (pool) await pool.query(`
   );
 `);
 
+async function publishedBookReady() {
+  if (!pool) return false;
+  const current = new Date();
+  const year = current.getUTCFullYear() - (current.getUTCMonth() < 10 ? 1 : 0);
+  const cycleStart = new Date(Date.UTC(year, 10, 1));
+  const result = await pool.query(`SELECT 1 FROM aom_releases r
+    JOIN aom_release_editions e ON e.release_id=r.id
+    JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256
+    WHERE r.status='published' AND r.published_at<=now() AND r.published_at >= $1
+      AND e.approved_at IS NOT NULL
+    GROUP BY r.id HAVING COUNT(DISTINCT e.language)=3 LIMIT 1`, [cycleStart]);
+  return result.rowCount > 0;
+}
+async function billingReady() {
+  return Boolean(pool && stripe && STRIPE_PRICE_ID && STRIPE_ANNUAL_PRICE_ID &&
+    process.env.STRIPE_WEBHOOK_SECRET && process.env.STRIPE_PORTAL_CONFIGURATION_ID &&
+    process.env.AOM_RESEND_API_KEY && process.env.AOM_FROM_EMAIL) && await publishedBookReady();
+}
 function send(res, status, body, type = 'text/html; charset=utf-8') {
   res.writeHead(status, { 'Content-Type': type });
   res.end(body);
@@ -305,6 +323,8 @@ const server = createServer(async (req, res) => {
       return handleStripeWebhook({req,res,stripe,pool,secret:process.env.STRIPE_WEBHOOK_SECRET});
     }
     if (req.method === 'POST' && !pathname.startsWith('/api/admin/') && req.headers.origin !== appUrl.origin) return send(res, 403, 'Request rejected.');
+    if (pathname === '/join' && req.method === 'GET') return redirect(res,
+      await billingReady() ? '/register' : '/early-access');
     if (pathname === '/health' && req.method === 'GET') return send(res, 200, 'ok', 'text/plain');
     if (pathname === '/ready' && req.method === 'GET') {
       const configured = Boolean(pool && stripe && STRIPE_PRICE_ID && STRIPE_ANNUAL_PRICE_ID &&
@@ -460,19 +480,9 @@ const server = createServer(async (req, res) => {
         return redirect(res, '/');
       }
       if (!stripe || !STRIPE_PRICE_ID) return send(res, 503, page('Checkout setup pending', '<p>The Stripe payment configuration is not ready.</p><a href="/member">Back to membership</a>'));
-      if (pathname === '/checkout' && productionMode) {
-        const inventory = await pool.query(`SELECT 1 FROM aom_releases r
-          JOIN aom_release_editions e ON e.release_id=r.id
-          JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256
-          WHERE r.status='published' AND r.published_at<=now()
-          AND r.published_at >= date_trunc('year', now() - interval '10 months') + interval '10 months'
-          AND e.approved_at IS NOT NULL
-          GROUP BY r.id HAVING COUNT(DISTINCT e.language)=3 LIMIT 1`);
-        if (!inventory.rowCount) return send(res, 503, page('Books being prepared',
-          '<p>Membership checkout will open once the first approved book is available in English, German, and Portuguese.</p><a href="/">Return to the website</a>'));
-        if (!process.env.AOM_RESEND_API_KEY || !process.env.AOM_FROM_EMAIL) return send(res, 503, page('Email delivery being prepared',
-          '<p>Membership checkout will open when automatic book delivery is connected.</p><a href="/">Return to the website</a>'));
-      }
+      if (pathname === '/checkout' && productionMode && !await billingReady())
+        return send(res, 503, page('Membership opening shortly',
+          '<p>Membership checkout is not open until the first approved books and delivery emails are ready.</p><p><a href="/early-access">Get a launch notification instead</a></p>'));
       if (pathname === '/checkout') {
         const parts = [];
         let length = 0;
