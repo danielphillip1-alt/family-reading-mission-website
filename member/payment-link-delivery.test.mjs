@@ -21,6 +21,17 @@ test('A paid annual Payment Link checkout creates a subscription record for book
  assert.equal(calls[0].args[3],'annual');
  assert.equal(calls[0].args[5],'active');
 });
+test('Portuguese selected in Stripe checkout is stored as European Portuguese',async()=>{
+ const calls=[];
+ const client={async query(sql,args){calls.push(args);return {rowCount:1}}};
+ const event={type:'checkout.session.completed',data:{object:{
+  mode:'subscription',payment_link:'plink_1UbGQ6RuZKBP2B3nVEKI0Y7h',
+  customer:'cus_PT',customer_details:{email:'portuguese@example.com'},
+  subscription:'sub_PT',custom_fields:[{key:'booklanguage',dropdown:{value:'pt'}}]}}};
+ const subscription={status:'active',items:{data:[{current_period_end:1893456000}]}};
+ assert.equal(await capturePaymentLinkEvent(client,null,event,subscription),true);
+ assert.equal(calls[0][4],'pt-PT');
+});
 test('Unknown payment links do not create membership records',async()=>{
  const client={async query(){throw Error('Should not write any data')}};
  const event={type:'checkout.session.completed',data:{object:{
