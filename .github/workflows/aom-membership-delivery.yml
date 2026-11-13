@@ -1,0 +1,17 @@
+name: AOM membership delivery tests
+on:
+  push:
+    branches: [feature/member-delivery-sandbox]
+  pull_request:
+    paths:
+      - 'member/delivery-rules*'
+      - 'member/migrations/**'
+jobs:
+  delivery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test member/delivery-rules.test.mjs
