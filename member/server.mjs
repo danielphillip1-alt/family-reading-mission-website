@@ -6,7 +6,6 @@ import pg from 'pg';
 import Stripe from 'stripe';
 import { handleStripeWebhook } from './stripe-webhook.mjs';
 import { handleBooks, processDueDeliveries } from './book-delivery.mjs';
-import { processPaymentLinkDeliveries } from './payment-link-delivery.mjs';
 import {mailConfigured} from './mail.mjs';
 import {importApprovedBookOne} from './import-approved-books.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
@@ -609,7 +608,7 @@ let deliveryBusy = false;
 async function deliverDueBooks() {
   if (deliveryBusy || !pool || !mailConfigured()) return;
   deliveryBusy = true;
-  try { await processDueDeliveries(pool); await processPaymentLinkDeliveries(pool); }
+  try { await processDueDeliveries(pool); }
   catch (error) { console.error('Automatic book delivery failed', error?.code || error?.name); }
   finally { deliveryBusy = false; }
 }
