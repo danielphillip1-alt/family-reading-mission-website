@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { capturePaymentLinkEvent } from './payment-link-delivery.mjs';
 
 const RELEVANT_EVENTS = new Set(['checkout.session.completed','customer.subscription.created','customer.subscription.updated','customer.subscription.deleted','invoice.paid','invoice.payment_failed']);
 const MAX_PAYLOAD=1024*1024;
@@ -40,7 +39,6 @@ export async function handleStripeWebhook({req,res,stripe,pool,secret}) {
     if(customerId && subscriptionId) {
       // Retrieve authoritative Stripe subscription so out-of-order events cannot roll status backwards.
       const subscription=await stripe.subscriptions.retrieve(subscriptionId);
-      await capturePaymentLinkEvent(client, stripe, event, subscription);
       const period=subscription.items?.data?.[0]?.current_period_end ?? subscription.current_period_end;
       const directLinks=new Set(['plink_1UbGQ6RuZKBP2B3nVEKI0Y7h','plink_1UbOT5RuZKBP2B3nKgZfg1ie']);
       if(event.type==='checkout.session.completed' && directLinks.has(typeof data.payment_link==='string' ? data.payment_link : data.payment_link?.id)){
