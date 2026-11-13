@@ -131,6 +131,11 @@ export async function handleBooks(req,res,url,currentMember,pool){
       'Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff'});
     res.end(stored.rows[0].pdf_content);return true;
   }
+  if(path==='/api/admin/launch-interest' && req.method==='GET'){
+    if(!authorized(req)){reply(res,403,{error:'Unauthorized'});return true;}
+    const q=await pool.query('SELECT email,language,consented_at,source FROM aom_launch_interest ORDER BY consented_at ASC LIMIT 50000');
+    reply(res,200,{count:q.rowCount,contacts:q.rows});return true;
+  }
   if(path==='/api/admin/upload-pdf' && req.method==='POST'){
     if(!authorized(req)){reply(res,403,{error:'Unauthorized'});return true;}
     const key=req.headers['x-aom-storage-key'];
