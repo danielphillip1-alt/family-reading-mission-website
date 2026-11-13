@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import pg from 'pg';
 import Stripe from 'stripe';
 import { handleStripeWebhook } from './stripe-webhook.mjs';
-import { handleBooks } from './book-delivery.mjs';
+import { handleBooks, processDueDeliveries } from './book-delivery.mjs';
 
 const deriveKey = promisify(scrypt);
 const { DATABASE_URL, STRIPE_API_KEY, STRIPE_PRICE_ID, STRIPE_ANNUAL_PRICE_ID, APP_URL } = process.env;
@@ -121,7 +121,7 @@ function page(title, body) {
 
 function authForm(join, message = '') {
   const title = join ? (productionMode ? 'Create an account' : 'Create a test account') : 'Sign in';
-  const other = join ? '<a href="/signin">Sign in</a>' : '<a href="/register">Create a test account</a>';
+  const other = join ? '<a href="/signin">Sign in</a>' : '<a href="/register">Create an account</a>';
   return page(title, `<p>${productionMode ? 'Sign in to access your membership.' : 'Stripe sandbox. Use test details and a password you do not use elsewhere.'}</p>
   ${message && `<p role="alert">${message}</p>`}
   <form method="post">
@@ -316,6 +316,7 @@ const server = createServer(async (req, res) => {
         webhook_configured: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
         admin_configured: Boolean(process.env.AOM_ADMIN_API_TOKEN),
         portal_configured: Boolean(portalConfig),
+        email_configured: Boolean(process.env.AOM_RESEND_API_KEY && process.env.AOM_FROM_EMAIL),
         deployment: productionMode ? 'production' : 'sandbox'
       }), 'application/json; charset=utf-8');
     }
@@ -457,4 +458,14 @@ const server = createServer(async (req, res) => {
   }
 });
 
+let deliveryBusy = false;
+async function deliverDueBooks() {
+  if (deliveryBusy || !pool || !process.env.AOM_RESEND_API_KEY || !process.env.AOM_FROM_EMAIL) return;
+  deliveryBusy = true;
+  try { await processDueDeliveries(pool); }
+  catch (error) { console.error('Automatic book delivery failed', error?.code || error?.name); }
+  finally { deliveryBusy = false; }
+}
 server.listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+setInterval(deliverDueBooks, 60_000).unref();
+setTimeout(deliverDueBooks, 5_000).unref();
