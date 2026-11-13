@@ -3,6 +3,10 @@ import { timingSafeEqual, createHash } from 'node:crypto';
 
 
 const LANGUAGES = new Set(['en','de','pt-PT']);
+function readingCycleStart(now = new Date()) {
+  const year = now.getUTCFullYear() - (now.getUTCMonth() < 10 ? 1 : 0);
+  return new Date(Date.UTC(year, 10, 1));
+}
 
 const reply=(res,status,obj)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(obj));};
 const languageOK=(value)=>LANGUAGES.has(value);
@@ -58,8 +62,8 @@ export async function handleBooks(req,res,url,currentMember,pool){
     const q=await pool.query(`SELECT r.slug,r.id,r.published_at,m.preferred_language
         FROM aom_releases r CROSS JOIN members m
         JOIN aom_release_editions e ON e.release_id=r.id AND e.language=m.preferred_language
-        WHERE m.id=$1 AND r.status='published' AND r.published_at<=now() AND e.approved_at IS NOT NULL
-        ORDER BY r.published_at DESC LIMIT 100`,[member.id]);
+        WHERE m.id=$1 AND r.status='published' AND r.published_at<=now() AND r.published_at >= $2 AND e.approved_at IS NOT NULL
+        ORDER BY r.published_at DESC LIMIT 100`,[member.id,readingCycleStart()]);
     reply(res,200,{language:q.rows[0]?.preferred_language||'en',books:q.rows.map(({slug,id,published_at})=>({id,slug,published_at,download:'/api/books/'+id+'/download'}))});return true;
   }
   const dl=/^\/api\/books\/([0-9a-fA-F-]{36})\/download$/.exec(path);
@@ -71,7 +75,7 @@ export async function handleBooks(req,res,url,currentMember,pool){
        FROM aom_release_editions e JOIN aom_releases r ON r.id=e.release_id
        JOIN members m ON m.id=$2
        WHERE e.release_id=$1 AND e.language=m.preferred_language
-       AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()`,[dl[1],member.id]);
+       AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now() AND r.published_at >= $3`,[dl[1],member.id,readingCycleStart()]);
     if(!q.rowCount){reply(res,404,{error:'Edition not available in your language'});return true;}
     const stored=await pool.query('SELECT pdf_content FROM aom_book_files WHERE storage_key=$1',[q.rows[0].private_object_key]);
     if(!stored.rowCount){reply(res,503,{error:'Approved PDF not yet uploaded'});return true;}
