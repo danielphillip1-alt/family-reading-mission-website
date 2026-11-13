@@ -615,6 +615,8 @@ async function deliverDueBooks() {
   catch (error) { console.error('Automatic book delivery failed', error?.code || error?.name); }
   finally { deliveryBusy = false; }
 }
+const mailEnvNames=Object.keys(process.env).filter(k=>/RESEND|SMTP|AOM_FROM|EMAIL_API|EMAIL_KEY/i.test(k)).sort();
+console.log('Email environment variable names present:',mailEnvNames.join(',')||'(none)');
 const stripePermissions = { checkoutRead: false, subscriptionRead: false };
 async function verifyStripeReadPermissions() {
  if(!stripe) return;
