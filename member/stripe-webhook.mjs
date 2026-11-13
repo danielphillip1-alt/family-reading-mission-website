@@ -38,6 +38,28 @@ export async function handleStripeWebhook({req,res,stripe,pool,secret}) {
     if(customerId && subscriptionId) {
       // Retrieve authoritative Stripe subscription so out-of-order events cannot roll status backwards.
       const subscription=await stripe.subscriptions.retrieve(subscriptionId);
+      const period=subscription.items?.data?.[0]?.current_period_end ?? subscription.current_period_end;
+      const directLinks=new Set(['plink_1UbGQ6RuZKBP2B3nVEKI0Y7h','plink_1UbOT5RuZKBP2B3nKgZfg1ie']);
+      if(event.type==='checkout.session.completed' && directLinks.has(typeof data.payment_link==='string' ? data.payment_link : data.payment_link?.id)){
+        const field=data.custom_fields?.find(x=>x.key==='booklanguage');
+        const selected=field?.dropdown?.value==='de'?'de':field?.dropdown?.value==='pt'?'pt-PT':'en';
+        let email=data.customer_details?.email||data.customer_email;
+        if(!email){
+          const customer=await stripe.customers.retrieve(customerId);
+          email=customer?.email;
+        }
+        if(email && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){
+          await client.query(`INSERT INTO aom_direct_subscriptions
+            (stripe_subscription_id,stripe_customer_id,email,language,status,current_period_end)
+            VALUES($1,$2,$3,$4,$5,$6)
+            ON CONFLICT(stripe_subscription_id) DO UPDATE SET
+              email=excluded.email,language=excluded.language,status=excluded.status,
+              current_period_end=excluded.current_period_end,updated_at=now()`,
+            [subscriptionId,customerId,email.toLowerCase(),selected,subscription.status,period?new Date(period*1000):null]);
+        }
+      }
+      await client.query(`UPDATE aom_direct_subscriptions SET status=$2,current_period_end=$3,updated_at=now()
+         WHERE stripe_subscription_id=$1`,[subscriptionId,subscription.status,period?new Date(period*1000):null]);
       const stripeMemberId=subscription.metadata?.member_id||null;
       const matching=await client.query(
         'SELECT id FROM members WHERE stripe_customer_id=$1 OR (id::text=$2 AND stripe_customer_id IS NULL) LIMIT 1',
@@ -45,7 +67,7 @@ export async function handleStripeWebhook({req,res,stripe,pool,secret}) {
       const member=matching.rows[0];
       if(member){
         await client.query('UPDATE members SET stripe_customer_id=$1 WHERE id=$2 AND (stripe_customer_id IS NULL OR stripe_customer_id=$1)',[customerId,member.id]);
-        const period=subscription.items?.data?.[0]?.current_period_end ?? subscription.current_period_end;
+
         await client.query(
           `INSERT INTO aom_subscription_states (stripe_subscription_id,member_id,stripe_customer_id,status,current_period_end,cancel_at_period_end,updated_at)
           VALUES($1,$2,$3,$4,$5,$6,now()) ON CONFLICT(stripe_subscription_id) DO UPDATE SET
