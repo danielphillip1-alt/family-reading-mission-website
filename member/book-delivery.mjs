@@ -195,8 +195,8 @@ export async function handleBooks(req,res,url,currentMember,pool){
   if(path==='/api/admin/upload-pdf' && req.method==='POST'){
     if(!authorized(req)){reply(res,403,{error:'Unauthorized'});return true;}
     const key=req.headers['x-aom-storage-key'];
-    if(typeof key!=='string'||!/^books\/[a-z0-9/_-]+\.pdf$/.test(key)||key.includes('..')){
-      reply(res,400,{error:'Invalid private book key'});return true;
+    if(typeof key!=='string'||!/^customer-pdfs\/[a-z0-9/_-]+\.pdf$/.test(key)||key.includes('..')){
+      reply(res,400,{error:'Only Customer PDFs approved upload keys are accepted'});return true;
     }
     const parts=[];let n=0;
     try{
@@ -215,8 +215,8 @@ export async function handleBooks(req,res,url,currentMember,pool){
     let body;try{body=await parseJSON(req);}catch{reply(res,400,{error:'Invalid JSON'});return true;}
     if(typeof body.slug!=='string'||!/^[a-z0-9-]{3,80}$/.test(body.slug)||typeof body.publishAt!=='string'||!Number.isFinite(Date.parse(body.publishAt))){reply(res,400,{error:'Invalid release'});return true;}
     const editions=body.editions||{};
-    if(![...LANGUAGES].every(l=>typeof editions[l]?.key==='string' && editions[l].key.startsWith('books/') && /^[a-f\d]{64}$/.test(editions[l]?.sha256||''))){
-      reply(res,400,{error:'Three approved editions required'});return true;
+    if(![...LANGUAGES].every(l=>typeof editions[l]?.key==='string' && editions[l].key.startsWith('customer-pdfs/') && /^[a-f\d]{64}$/.test(editions[l]?.sha256||''))){
+      reply(res,400,{error:'Three approved Customer PDFs editions required'});return true;
     }
     const client=await pool.connect();
     try{
