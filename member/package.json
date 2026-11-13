@@ -2,7 +2,17 @@
   "name": "authors-on-a-mission-membership",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
-  "scripts": { "start": "node server.mjs" },
-  "dependencies": { "pg": "8.23.1", "stripe": "23.1.0" }
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test delivery-rules.test.mjs stripe-webhook.test.mjs"
+  },
+  "dependencies": {
+    "pg": "8.23.1",
+    "stripe": "23.1.0",
+    "@aws-sdk/client-s3": "3.917.0",
+    "@aws-sdk/s3-request-presigner": "3.917.0"
+  }
 }
