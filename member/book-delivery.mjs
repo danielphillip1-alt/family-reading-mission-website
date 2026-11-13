@@ -3,10 +3,7 @@ import { timingSafeEqual, createHash } from 'node:crypto';
 
 
 const LANGUAGES = new Set(['en','de','pt-PT']);
-function readingCycleStart(now = new Date()) {
-  const year = now.getUTCFullYear() - (now.getUTCMonth() < 10 ? 1 : 0);
-  return new Date(Date.UTC(year, 10, 1));
-}
+import { readingCycleStart } from './delivery-rules.mjs';
 
 const reply=(res,status,obj)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(obj));};
 const languageOK=(value)=>LANGUAGES.has(value);
