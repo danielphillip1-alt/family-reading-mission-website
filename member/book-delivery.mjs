@@ -88,7 +88,53 @@ export async function processDueDeliveries(pool) {
     }
   }
 
-  return {configured:true,processed:batch.rowCount,sent,failed};
+
+  // Payment-link checkout creates a Stripe customer but no local password account.
+  // Deliver directly to the verified checkout email when a subscription is active.
+  await pool.query(`INSERT INTO aom_direct_delivery_outbox
+       (id,stripe_subscription_id,release_id,language)
+    SELECT gen_random_uuid(),s.stripe_subscription_id,r.id,s.language
+      FROM aom_direct_subscriptions s
+      JOIN aom_releases r ON r.status='published' AND r.published_at<=now() AND r.published_at >= $1
+      JOIN aom_release_editions e ON e.release_id=r.id AND e.language=s.language AND e.approved_at IS NOT NULL
+      JOIN aom_book_files b ON b.storage_key=e.private_object_key AND b.sha256=e.sha256
+    WHERE s.status IN ('active','trialing') AND s.current_period_end>now()
+    ON CONFLICT(stripe_subscription_id,release_id) DO NOTHING`,[readingCycleStart()]);
+  await pool.query("UPDATE aom_direct_delivery_outbox SET state='retry' WHERE state='processing' AND next_attempt_at<now()-interval '15 minutes'");
+  const directBatch=await pool.query(`WITH picked AS (
+     SELECT id FROM aom_direct_delivery_outbox
+     WHERE state IN ('pending','retry') AND next_attempt_at<=now()
+     ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT 30
+  ) UPDATE aom_direct_delivery_outbox o SET state='processing',attempts=attempts+1
+     FROM picked WHERE o.id=picked.id RETURNING o.*`);
+  let directSent=0,directFailed=0;
+  for (const task of directBatch.rows) {
+    try {
+      const q=await pool.query(`SELECT s.email,s.language,r.slug,b.pdf_content
+        FROM aom_direct_subscriptions s
+        JOIN aom_releases r ON r.id=$2 AND r.status='published' AND r.published_at <= now()
+        JOIN aom_release_editions e ON e.release_id=r.id AND e.language=s.language AND e.approved_at IS NOT NULL
+        JOIN aom_book_files b ON b.storage_key=e.private_object_key AND b.sha256=e.sha256
+        WHERE s.stripe_subscription_id=$1 AND s.language=$3 AND s.status IN ('active','trialing')
+        AND s.current_period_end>now()`,[task.stripe_subscription_id,task.release_id,task.language]);
+      if(!q.rowCount){
+        await pool.query("UPDATE aom_direct_delivery_outbox SET state='cancelled' WHERE id=$1",[task.id]);continue;
+      }
+      const book=q.rows[0],copy=COPY[book.language];
+      const html='<p>'+escapeHTML(copy.subject)+'</p><p>Your subscribed book is attached to this email as a PDF. Keep this email to access it later.</p>';
+      const attachment={filename:book.slug+'-'+book.language+'.pdf',content:book.pdf_content.toString('base64')};
+      const response=await sendResend({email:book.email,subject:copy.subject,html,attachments:[attachment]},task.id);
+      await pool.query("UPDATE aom_direct_delivery_outbox SET state='sent',provider_message_id=$1 WHERE id=$2",[response.id||null,task.id]);
+      directSent++;
+    }catch(e){
+      await pool.query(`UPDATE aom_direct_delivery_outbox
+        SET state=CASE WHEN attempts>=5 THEN 'failed' ELSE 'retry' END,
+            next_attempt_at=now()+LEAST(3600,POWER(2,LEAST(attempts,10))*60)*interval '1 second'
+        WHERE id=$1`,[task.id]);directFailed++;
+    }
+  }
+  return {configured:true,processed:batch.rowCount+directBatch.rowCount,sent:sent+directSent,failed:failed+directFailed};
+
 }
 
 export async function handleBooks(req,res,url,currentMember,pool){
