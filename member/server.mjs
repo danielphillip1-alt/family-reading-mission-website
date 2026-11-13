@@ -11,7 +11,7 @@ const deriveKey = promisify(scrypt);
 const { DATABASE_URL, STRIPE_PRICE_ID, STRIPE_ANNUAL_PRICE_ID, APP_URL } = process.env;
 // Accept well-known Stripe secret-key environment names without exposing any key.
 const STRIPE_API_KEY = process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY ||
-  process.env.STRIPE_LIVE_SECRET_KEY || process.env.STRIPE_RESTRICTED_KEY || process.env.STRIPE_LIVE_API_KEY;
+  process.env.STRIPE_LIVE_SECRET_KEY || process.env.STRIPE_RESTRICTED_KEY || process.env.STRIPE_LIVE_API_KEY || process.env.Stripe_API_Key;
 const appUrl = new URL(APP_URL);
 const productionMode = process.env.AOM_ENV === 'production';
 if (STRIPE_API_KEY && !(productionMode ? /^(rk|sk)_live_/ : /^(rk|sk)_test_/).test(STRIPE_API_KEY)) {
