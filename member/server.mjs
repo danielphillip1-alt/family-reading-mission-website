@@ -8,7 +8,7 @@ import { handleStripeWebhook } from './stripe-webhook.mjs';
 import { handleBooks } from './book-delivery.mjs';
 
 const deriveKey = promisify(scrypt);
-const { DATABASE_URL, STRIPE_API_KEY, STRIPE_PRICE_ID, APP_URL } = process.env;
+const { DATABASE_URL, STRIPE_API_KEY, STRIPE_PRICE_ID, STRIPE_ANNUAL_PRICE_ID, APP_URL } = process.env;
 const appUrl = new URL(APP_URL);
 if (STRIPE_API_KEY && !/^(rk|sk)_test_/.test(STRIPE_API_KEY)) {
   throw new Error('The sandbox requires a Stripe test key.');
@@ -213,7 +213,10 @@ async function handleAuth(req, res, join) {
   return signIn(res, member.id);
 }
 
-async function checkout(memberId) {
+async function checkout(memberId, billingPlan) {
+  if (!['monthly', 'annual'].includes(billingPlan)) throw new Error('Invalid membership plan');
+  const selectedPrice = billingPlan === 'annual' ? STRIPE_ANNUAL_PRICE_ID : STRIPE_PRICE_ID;
+  if (!selectedPrice) throw new Error('This membership plan has not been configured yet');
   const db = await pool.connect();
   try {
     await db.query('BEGIN');
@@ -239,7 +242,7 @@ async function checkout(memberId) {
       return '/member?status=existing';
     }
     const existing = await stripe.checkout.sessions.list({ customer, status: 'open', limit: 10 });
-    const open = existing.data.find((session) => session.client_reference_id === memberId && session.url);
+    const open = existing.data.find((session) => session.client_reference_id === memberId && session.url && session.metadata?.billing_plan === billingPlan);
     if (open) {
       await db.query('COMMIT');
       return open.url;
@@ -255,14 +258,15 @@ async function checkout(memberId) {
         customer,
         client_reference_id: memberId,
         subscription_data: { metadata: { member_id: memberId } },
-        line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
+        line_items: [{ price: selectedPrice, quantity: 1 }],
+        metadata: { billing_plan: billingPlan },
         billing_address_collection: 'required',
         customer_update: { address: 'auto' },
         automatic_tax: { enabled: true },
         integration_identifier: 'authors-on-a-mission-sandbox-ctvrslkp',
         success_url: new URL('/member?status=submitted', appUrl).href,
         cancel_url: new URL('/member?status=canceled', appUrl).href,
-      }, { idempotencyKey: `member-checkout-${attempt}` });
+      }, { idempotencyKey: `member-checkout-${billingPlan}-${attempt}` });
       await db.query('COMMIT');
       return session.url;
     } catch (error) {
@@ -317,7 +321,16 @@ const server = createServer(async (req, res) => {
       const notice = Object.hasOwn(messages, status) ? messages[status] : '';
       return send(res, 200, page('Your test membership', `
         ${notice && `<p role="status">${notice}</p>`}
-        <form method="post" action="/checkout"><button>Join for €3.99/month (test)</button></form>
+        <p>Choose your plan. Both renew automatically unless you cancel before your next renewal date. Cancel through Manage membership and keep access until the paid period ends.</p>
+        <form method="post" action="/checkout">
+          <input type="hidden" name="plan" value="monthly">
+          <button>€3.99 per month (test) — renews monthly</button>
+        </form>
+        <form method="post" action="/checkout">
+          <input type="hidden" name="plan" value="annual">
+          <button>€39.90 per year (test) — 2 months free; renews annually</button>
+        </form>
+        <p>Annual membership saves €7.98 (16.7%) compared with 12 monthly payments. Taxes are included where applicable.</p>
         ${member.stripe_customer_id ? '<form method="post" action="/portal"><button>Manage membership (test)</button></form>' : ''}
         <section id="aom-books-panel">
           <h2>Your books</h2>
@@ -360,7 +373,20 @@ const server = createServer(async (req, res) => {
         return redirect(res, '/');
       }
       if (!stripe || !STRIPE_PRICE_ID) return send(res, 503, page('Checkout setup pending', '<p>The sandbox Stripe API key still needs to be configured.</p><a href="/member">Back to membership</a>'));
-      if (pathname === '/checkout') return redirect(res, await checkout(member.id));
+      if (pathname === '/checkout') {
+        const parts = [];
+        let length = 0;
+        for await (const chunk of req) {
+          length += chunk.length;
+          if (length > 2048) return send(res, 413, 'Invalid plan');
+          parts.push(chunk);
+        }
+        const form = new URLSearchParams(Buffer.concat(parts).toString());
+        const plan = form.get('plan') || 'monthly';
+        if (!['monthly', 'annual'].includes(plan)) return send(res, 400, 'Invalid plan');
+        if (plan === 'annual' && !STRIPE_ANNUAL_PRICE_ID) return send(res, 503, page('Annual plan pending', '<p>The annual test price is not connected yet.</p><a href="/member">Back to membership</a>'));
+        return redirect(res, await checkout(member.id, plan));
+      }
       if (!member.stripe_customer_id) return redirect(res, '/member');
       const portal = await stripe.billingPortal.sessions.create({
         customer: member.stripe_customer_id,
