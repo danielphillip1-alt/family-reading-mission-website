@@ -1,34 +1,18 @@
-# RENDER — RESUME HERE (PAUSED)
-**Project:** Authors On A Mission — membership and automatic PDF book delivery
-**Checkpoint saved:** November 13, 2026
-**Status:** PAUSED AT USER'S REQUEST. No manual action required until user is back at their computer.
-**Exact phrase to resume:** "RESUME RENDER CONNECTION"
+# RESUME AOM CUSTOMER LAUNCH — PAUSED 2026-11-13
 
-## Where we stopped
-The user approved month-to-month payment for a production PostgreSQL database. The assistant successfully created the paid Render database and verified that its status was **available**. The new paid database has NOT been connected to the existing membership web service yet. The user was on a phone and asked to pause the manual connection process until back at a computer, to work ONE STEP AT A TIME.
+**Exact phrase to resume:** "RESUME AOM CUSTOMER LAUNCH"
 
-## Identifiers and links (non-secret)
-- Render workspace: **My Workspace**, ID `tea-dbq54c0ae00c73dbl92g`
-- Paid database: **aom-members-production**, ID `dpg-dbreshec6qcc73dmvf8g-a`, plan `basic_256mb`, PostgreSQL 16, 1 GB, Frankfurt, status last checked **available**
-- Database dashboard: https://dashboard.render.com/d/dpg-dbreshec6qcc73dmvf8g-a
-- Existing membership sandbox service: **authors-on-a-mission-members-sandbox**, ID `srv-dbrc7ctbedkc73d6ba7g`
-- Membership service dashboard: https://dashboard.render.com/web/srv-dbrc7ctbedkc73d6ba7g
-- Sandbox health endpoint: https://authors-on-a-mission-members-sandbox.onrender.com/health
-- Public website: https://www.theauthorsmission.de
-- GitHub repo: https://github.com/danielphillip1-alt/family-reading-mission-website
-- Subscriber development branch: `feature/member-delivery-sandbox`; public site is not connected to that branch.
-- Existing temporary database: `aom-sandbox-members`, ID `dpg-dbrc6gt9fdbs73dut8ig-a`, free, expiration December 13, 2026. **Do not delete before checking whether test members/data need migration.**
+**User instruction:** Table the latest results and remaining work until user is home in a couple hours. Do not confuse with the older Render database connection checkpoint; database connection has since been completed and verified. Give one step at a time only if account authorization is unavoidable. User explicitly does NOT want routine screenshots, testing, or manual coding.
 
-## Next action when user says RESUME RENDER CONNECTION
-1. Have user open the paid database dashboard at the link above on their computer.
-2. Guide **one step at a time**. On database page, choose **Connect** and copy **Internal Database URL**. **Never paste secret URL/password into ChatGPT.**
-3. Guide to membership service dashboard → **Environment** → existing `DATABASE_URL` → update VALUE using the Internal Database URL from user's clipboard → save and deploy. Do not replace all environment variables or alter other values.
-4. Verify Render deploy status and backend database functionality **independently**. Note that a GET to `/health` returning `ok` only proves that the HTTP server runs; it does NOT verify the database connectivity.
-5. Before treating service as production, inspect whether the service remains on `stripe-sandbox-membership` with test-only Stripe credentials. Do NOT switch it to live Stripe automatically. Existing subscriber automation code on separate development branch is NOT deployed and is NOT yet end-to-end verified.
-6. Once connected, continue tests for verified Stripe webhooks, language selection (English/German/European Portuguese), approved PDFs in private storage, subscription entitlements, email sending, scheduling and cancellation. Do not advertise subscriber readiness until actual end-to-end proof.
-
-## User communication preferences
-- User is working from one device sometimes and cannot repeatedly toggle between Render and ChatGPT to provide screenshots. When on a computer, user wants ONE SMALL STEP AT A TIME, with explicit click targets and no assumptions.
-- No repeated steps or asking information already known. No more paid services without authorization; monthly, not yearly.
-- Do not request screenshots that contain database secrets.
-- Keep explanations short, clear, precise.
+## Actual verified status (Nov 13, 2026)
+- Public website https://www.theauthorsmission.de is live, but fully functional paid-member delivery is **NOT** certified or customer-ready.
+- Render workspace: My Workspace `tea-dbq54c0ae00c73dbl92g`.
+- Paid PostgreSQL `aom-members-production`, ID `dpg-dbreshec6qcc73dmvf8g-a`, Frankfurt, monthly basic_256mb plan, Available. User copied Internal Database URL securely into membership sandbox `DATABASE_URL`.
+- Render web service `authors-on-a-mission-members-sandbox`, ID `srv-dbrc7ctbedkc73d6ba7g`, URL https://authors-on-a-mission-members-sandbox.onrender.com, GitHub branch `stripe-sandbox-membership`, remains in Stripe TEST mode. Newer code was merged into that branch via PR #1 (merge commit `974854fb91bc5f9f447ff29e9063686547ee9fd3`). Render deployment `dep-dbrg1rtg1s2s738cvua0` completed with successful build and live service. Browser QA successfully tested signup, sign-in/sign-out, language preference English/German/European Portuguese, and no book access without subscription. Book upload, authorized download, email, and paid renewal/cancel flow not yet proven in live E2E.
+- Stripe account live `acct_1UbDu6RuZKBP2B3n`, live recurring price €3.99/mo and live payment link https://buy.stripe.com/28E3cxeAY2HM1QYe89ffy00. Live webhook endpoints were checked and **none existed**. Customer-to-member account linking, secure webhook, Stripe portal, renewal/cancellation and tax registration require final configuration and test. Never assume Stripe sandbox credentials can process live events. No live charge verification.
+- Email: Resend FREE account created via GitHub OAuth, 3000 transactional/month, max 100/day. Sending-only API key created in Resend but **NOT installed in Render**; later key automation failed without returning a usable key, so key must be securely transferred without exposing it in chat. Resend sending subdomain `mail.theauthorsmission.de` was added; DNS verification NOT done. IONOS account manages theauthorsmission.de DNS. Needed DNS (verify directly against Resend UI before writing): TXT DKIM at `resend._domainkey.mail`, TXT SPF at `send.mail` and perhaps optional MX `send.mail` for SES feedback. Preserve apex MX and existing IONOS professional mailboxes. DNS record exact values were gathered from Resend and can be re-read.
+- Book files: private database-backed PDF storage code has been deployed in sandbox; exact *approved* EN/DE/PT book PDFs for launch are NOT uploaded/verified in running app. Search user Library to locate authoritative approved PDFs, don't publish drafts. Older Singularity master index specifically warns Book One exact published file was not verified, Book Two editions pending; independent AOM monthly release content must be confirmed. A release must have three approved editions.
+- Remaining tasks: verify Resend domain DNS and key; create live Stripe signed webhook and portal; ensure payment QR checkout automatically links to verified member identity; verify verified-access secure PDF delivery; automated welcome and monthly email scheduling (no actual scheduler yet); cancellations/renewal/payment failures; conduct full end-to-end sandbox & live proof and deliver clear launch gate. Current email queue endpoint `/api/admin/deliver` requires an external scheduler and configured credentials; do not claim monthly automatic sends work.
+- Cost guardrails: user authorized paid monthly Render database only, free Resend for now, no annual charge, no extra paid services. Do not change production website until safe and tested.
+- Existing checkpoint file `RENDER-RESUME-HERE.md` under GitHub repo branch `feature/member-delivery-sandbox` is being updated to this new current status.
+- User is presently away, wants a digital printing shop in Altona, Hamburg, and to resume customer-launch integration when back home.
