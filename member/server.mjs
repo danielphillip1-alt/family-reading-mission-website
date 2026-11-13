@@ -429,6 +429,8 @@ const server = createServer(async (req, res) => {
         monthly_price: Boolean(STRIPE_PRICE_ID),
         annual_price: Boolean(STRIPE_ANNUAL_PRICE_ID),
         stripe_configured: Boolean(stripe),
+        stripe_checkout_read_verified: stripePermissions.checkoutRead,
+        stripe_subscription_read_verified: stripePermissions.subscriptionRead,
         webhook_configured: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
         admin_configured: Boolean(process.env.AOM_ADMIN_API_TOKEN),
         portal_configured: Boolean(portalConfig),
@@ -612,7 +614,17 @@ async function deliverDueBooks() {
   catch (error) { console.error('Automatic book delivery failed', error?.code || error?.name); }
   finally { deliveryBusy = false; }
 }
+const stripePermissions = { checkoutRead: false, subscriptionRead: false };
+async function verifyStripeReadPermissions() {
+ if(!stripe) return;
+ try {await stripe.checkout.sessions.list({limit:1});stripePermissions.checkoutRead=true;}
+ catch(error){console.error('Stripe checkout read permission failed',error?.code||error?.type);}
+ try {await stripe.subscriptions.list({limit:1});stripePermissions.subscriptionRead=true;}
+ catch(error){console.error('Stripe subscription read permission failed',error?.code||error?.type);}
+ console.log('Stripe read API permissions',JSON.stringify(stripePermissions));
+}
 server.listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+setTimeout(verifyStripeReadPermissions, 1000).unref();
 setInterval(deliverDueBooks, 60_000).unref();
 setTimeout(deliverDueBooks, 5_000).unref();
 startupMigrations.then(async()=>{
