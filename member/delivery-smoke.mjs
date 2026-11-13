@@ -51,3 +51,43 @@ export async function testFirstBookDelivery(pool){
   return {status:'failed'};
  }
 }
+
+export async function testTranslatedBooksDelivery(pool){
+ if(!pool || !mailConfigured())return;
+ for(const [language,filename] of [
+  ['de','Zachary_My_Unique_Book_One_DE.pdf'],
+  ['pt-PT','Zachary_My_Unique_Book_One_PT.pdf']
+ ]){
+  const token='full-book-email-verified-'+language+'-2026-11';
+  const claimed=await pool.query(`
+    INSERT INTO aom_delivery_smoke_tests(test_name,state,attempts)
+    VALUES($1,'processing',1)
+    ON CONFLICT(test_name) DO UPDATE
+    SET state='processing',attempts=aom_delivery_smoke_tests.attempts+1,updated_at=now()
+    WHERE aom_delivery_smoke_tests.state<>'sent'
+      AND aom_delivery_smoke_tests.attempts<3 RETURNING state,attempts`,[token]);
+  if(!claimed.rowCount)continue;
+  try{
+   const q=await pool.query(`SELECT b.pdf_content FROM aom_releases r
+    JOIN aom_release_editions e ON e.release_id=r.id AND e.language=$1
+    JOIN aom_book_files b ON b.storage_key=e.private_object_key AND b.sha256=e.sha256
+    WHERE r.status='published' AND r.slug='zachary-my-unique-hat-2026-11'
+    AND e.approved_at IS NOT NULL LIMIT 1`,[language]);
+   if(!q.rowCount)throw Error('Approved translation missing');
+   const pdf=q.rows[0].pdf_content;
+   if(pdf.length<1000 || pdf.subarray(0,5).toString()!=='%PDF-')throw Error('Invalid complete PDF');
+   const result=await sendTransactionalMail({
+      email:'brathatfashionhouse@gmail.com',
+      subject:'Authors On A Mission — automatic '+language+' book email delivery test',
+      html:'<p>Automated delivery test for the complete '+language+' version of Book One. No customer was charged.</p>',
+      attachments:[{filename,content:pdf.toString('base64')}]
+   },token);
+   await pool.query(`UPDATE aom_delivery_smoke_tests
+     SET state='sent',provider_message_id=$2,updated_at=now() WHERE test_name=$1`,[token,result.id??null]);
+   console.log('Translation delivery smoke test: SUCCESS',language,'full PDF bytes',pdf.length);
+  }catch(error){
+   await pool.query(`UPDATE aom_delivery_smoke_tests SET state='failed',updated_at=now() WHERE test_name=$1`,[token]);
+   console.error('Translation delivery smoke test FAILED',language,error?.message?.slice(0,120)||'unknown');
+  }
+ }
+}
