@@ -53,9 +53,11 @@ export async function processDueDeliveries(pool) {
     FROM aom_releases r CROSS JOIN members m
     JOIN aom_release_editions e ON e.release_id=r.id AND e.language=m.preferred_language
     WHERE r.status='published' AND r.published_at<=now() AND e.approved_at IS NOT NULL
+    AND r.published_at > m.created_at
     AND EXISTS(SELECT 1 FROM aom_subscription_states s WHERE s.member_id=m.id
         AND s.status IN ('active','trialing') AND s.current_period_end>now())
     ON CONFLICT (release_id,member_id,kind) DO NOTHING`);
+  await pool.query("UPDATE aom_delivery_outbox SET state='retry' WHERE state='processing' AND next_attempt_at < now() - interval '15 minutes'");
   const batch=await pool.query(`WITH picked AS (
      SELECT id FROM aom_delivery_outbox WHERE state IN ('pending','retry')
      AND next_attempt_at<=now() ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT 30
