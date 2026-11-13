@@ -1,3 +1,4 @@
+import {sendTransactionalMail} from './mail.mjs';
 import { randomUUID } from 'node:crypto';
 
 const PLANS = new Map([
@@ -45,21 +46,13 @@ function cycleStart(now=new Date()){
   return new Date(Date.UTC(now.getUTCFullYear()-(now.getUTCMonth()<10?1:0),10,1));
 }
 
-async function emailPdf({to,subject,html,filename,pdf,id}) {
-  const key = process.env.AOM_RESEND_API_KEY;
-  const from = process.env.AOM_FROM_EMAIL;
-  if (!key || !from) throw Error('Email provider not configured');
-  const response = await fetch('https://api.resend.com/emails', {
-    method:'POST',
-    headers:{Authorization:'Bearer '+key,'Content-Type':'application/json','Idempotency-Key':id},
-    body:JSON.stringify({from,to:[to],subject,html,attachments:[{filename,content:pdf.toString('base64')}]})
-  });
-  if (!response.ok) throw Error('Email provider status '+response.status);
-  return await response.json();
+async function emailPdf({to,subject,html,filename,pdf,id}){
+ return sendTransactionalMail({email:to,subject,html,
+  attachments:[{filename,content:pdf.toString('base64')}]},id);
 }
 
 export async function processPaymentLinkDeliveries(pool) {
-  if (!pool || !process.env.AOM_RESEND_API_KEY || !process.env.AOM_FROM_EMAIL) return {configured:false};
+  if (!pool || !((process.env.AOM_RESEND_API_KEY && process.env.AOM_FROM_EMAIL) || process.env.AOM_GMAIL_APP_PASSWORD)) return {configured:false};
   await pool.query(`UPDATE aom_payment_link_delivery_outbox SET state='retry'
     WHERE state='processing' AND updated_at<now()-interval '15 minutes'`);
   await pool.query(`INSERT INTO aom_payment_link_delivery_outbox(id,stripe_subscription_id,release_id,kind,language)
