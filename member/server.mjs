@@ -333,7 +333,10 @@ const server = createServer(async (req, res) => {
       if (pool) {
         try { await pool.query('SELECT 1'); database = true; } catch { database = false; }
       }
-      const ready = configured && database && (!productionMode || Boolean(portalConfig));
+      const email = Boolean(process.env.AOM_RESEND_API_KEY && process.env.AOM_FROM_EMAIL);
+      let bookInventory = false;
+      if (database) {try {bookInventory = await publishedBookReady();} catch {bookInventory = false;}}
+      const ready = configured && database && (!productionMode || (Boolean(portalConfig) && email && bookInventory));
       return send(res, ready ? 200 : 503, JSON.stringify({
         ready,
         database,
@@ -343,7 +346,8 @@ const server = createServer(async (req, res) => {
         webhook_configured: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
         admin_configured: Boolean(process.env.AOM_ADMIN_API_TOKEN),
         portal_configured: Boolean(portalConfig),
-        email_configured: Boolean(process.env.AOM_RESEND_API_KEY && process.env.AOM_FROM_EMAIL),
+        email_configured: email,
+        approved_book_inventory: bookInventory,
         deployment: productionMode ? 'production' : 'sandbox'
       }), 'application/json; charset=utf-8');
     }
