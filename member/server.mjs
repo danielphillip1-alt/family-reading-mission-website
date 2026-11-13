@@ -7,6 +7,7 @@ import Stripe from 'stripe';
 import { handleStripeWebhook } from './stripe-webhook.mjs';
 import { handleBooks, processDueDeliveries } from './book-delivery.mjs';
 import { processPaymentLinkDeliveries } from './payment-link-delivery.mjs';
+import {mailConfigured} from './mail.mjs';
 
 
 const deriveKey = promisify(scrypt);
@@ -417,7 +418,7 @@ const server = createServer(async (req, res) => {
       if (pool) {
         try { await pool.query('SELECT 1'); database = true; } catch { database = false; }
       }
-      const email = Boolean(process.env.AOM_RESEND_API_KEY && process.env.AOM_FROM_EMAIL);
+      const email = mailConfigured();
       let bookInventory = false;
       if (database) {try {bookInventory = await publishedBookReady();} catch {bookInventory = false;}}
       const ready = configured && database && (!productionMode || (Boolean(portalConfig) && email && bookInventory));
@@ -603,7 +604,7 @@ const server = createServer(async (req, res) => {
 
 let deliveryBusy = false;
 async function deliverDueBooks() {
-  if (deliveryBusy || !pool || !process.env.AOM_RESEND_API_KEY || !process.env.AOM_FROM_EMAIL) return;
+  if (deliveryBusy || !pool || !mailConfigured()) return;
   deliveryBusy = true;
   try { await processDueDeliveries(pool); await processPaymentLinkDeliveries(pool); }
   catch (error) { console.error('Automatic book delivery failed', error?.code || error?.name); }
