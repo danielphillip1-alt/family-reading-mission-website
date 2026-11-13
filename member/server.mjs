@@ -319,18 +319,52 @@ const server = createServer(async (req, res) => {
       if (!member) return redirect(res, '/signin');
       const status = url.searchParams.get('status');
       const notice = Object.hasOwn(messages, status) ? messages[status] : '';
+      const cycleStart = new Date();
+      cycleStart.setUTCFullYear(cycleStart.getUTCFullYear() - (cycleStart.getUTCMonth() < 10 ? 1 : 0), 10, 1);
+      cycleStart.setUTCHours(0, 0, 0, 0);
+      const { rows: [releaseCount] } = await pool.query(
+        "SELECT COUNT(*)::int AS total FROM aom_releases WHERE status='published' AND published_at >= $1 AND published_at <= now()", [cycleStart]
+      );
+      const readyCount = releaseCount.total;
+      const cycleLabel = cycleStart.getUTCFullYear();
       return send(res, 200, page('Your test membership', `
         ${notice && `<p role="status">${notice}</p>`}
         <p>Choose your plan. Both renew automatically unless you cancel before your next renewal date. Cancel through Manage membership and keep access until the paid period ends.</p>
-        <form method="post" action="/checkout">
+        <section aria-labelledby="reading-year"><h2 id="reading-year">Your reading year: November ${cycleLabel} – October ${cycleLabel+1}</h2>
+        <p><strong>${readyCount} approved ${readyCount===1?'book has':'books have'} been released</strong> so far in this reading cycle. All released books available in your selected language are unlocked with an active membership. New books and their accompanying reading activities become available as they are published. The November reading cycle is separate from the billing anniversary: a yearly subscription renews 12 months after you sign up, not automatically every November.</p>
+        <p>Example: If you join in March after four monthly books have been published (November through February), all four are available immediately. You then receive new publications as they are released while your subscription is active.</p></section>
+        <form class="plan-checkout" method="post" action="/checkout">
           <input type="hidden" name="plan" value="monthly">
           <button>€3.99 per month (test) — renews monthly</button>
         </form>
-        <form method="post" action="/checkout">
+        <form class="plan-checkout" method="post" action="/checkout">
           <input type="hidden" name="plan" value="annual">
           <button>€39.90 per year (test) — 2 months free; renews annually</button>
         </form>
         <p>Annual membership saves €7.98 (16.7%) compared with 12 monthly payments. Taxes are included where applicable.</p>
+        <dialog id="aom-plan-dialog" aria-labelledby="plan-dialog-heading" style="max-width:28rem;border:1px solid #073d2e;border-radius:1rem;padding:1.5rem">
+          <h2 id="plan-dialog-heading">Before you subscribe</h2>
+          <p id="plan-dialog-text"></p>
+          <p>You can cancel automatic renewal in Manage membership. Access continues until the end of your paid term.</p>
+          <button type="button" id="confirm-plan">Continue to secure payment</button>
+          <button type="button" id="close-plan" style="background:#eee;color:#073d2e">Go back</button>
+        </dialog>
+        <script>
+          (() => {
+            const d=document.getElementById('aom-plan-dialog');
+            let pending=null;
+            document.querySelectorAll('.plan-checkout').forEach(f=>f.addEventListener('submit',e=>{
+              e.preventDefault();pending=f;
+              const annual=f.querySelector('[name=plan]').value==='annual';
+              document.getElementById('plan-dialog-text').textContent=
+                '${readyCount} book(s) have been published in the current November-to-October reading cycle. You can access previous published books immediately, with new releases arriving during your active membership. '+
+                (annual?'€39.90 will be charged now and automatically every 12 months unless you cancel.':'€3.99 will be charged now and automatically every month unless you cancel.');
+              d.showModal();
+            }));
+            document.getElementById('close-plan').onclick=()=>d.close();
+            document.getElementById('confirm-plan').onclick=()=>{if(pending)pending.submit();};
+          })();
+        </script>
         ${member.stripe_customer_id ? '<form method="post" action="/portal"><button>Manage membership (test)</button></form>' : ''}
         <section id="aom-books-panel">
           <h2>Your books</h2>
