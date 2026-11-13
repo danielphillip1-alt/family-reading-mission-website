@@ -9,6 +9,7 @@ import { handleBooks, processDueDeliveries } from './book-delivery.mjs';
 import { processPaymentLinkDeliveries } from './payment-link-delivery.mjs';
 import {mailConfigured} from './mail.mjs';
 import {importApprovedBookOne} from './import-approved-books.mjs';
+import {handlePurchaseDelivery} from './instant-book.mjs';
 
 
 const deriveKey = promisify(scrypt);
@@ -472,6 +473,7 @@ const server = createServer(async (req, res) => {
       }
     }
     if (!pool) return send(res, 503, page('Member setup pending', '<p>The membership database connection is temporarily unavailable.</p>'));
+    if (await handlePurchaseDelivery({req,res,url,stripe,pool})) return;
     if (pathname.startsWith('/api/') && await handleBooks(req,res,url,currentMember,pool)) return;
     if (pathname === '/register' || pathname === '/signin') {
       if (req.method === 'GET') return send(res, 200, authForm(pathname === '/register'));
