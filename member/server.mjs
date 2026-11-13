@@ -6,6 +6,7 @@ import pg from 'pg';
 import Stripe from 'stripe';
 import { handleStripeWebhook } from './stripe-webhook.mjs';
 import { handleBooks, processDueDeliveries } from './book-delivery.mjs';
+import { processPaymentLinkDeliveries } from './payment-link-delivery.mjs';
 
 
 const deriveKey = promisify(scrypt);
@@ -147,6 +148,33 @@ if (pool) await pool.query(`
     UNIQUE (stripe_subscription_id,release_id)
   );
   CREATE INDEX IF NOT EXISTS aom_payment_link_delivery_queue_idx ON aom_payment_link_delivery_outbox(state,next_attempt_at);
+  CREATE TABLE IF NOT EXISTS aom_payment_link_memberships (
+    stripe_subscription_id text PRIMARY KEY,
+    stripe_customer_id text NOT NULL,
+    email text NOT NULL,
+    plan text NOT NULL CHECK (plan IN ('monthly','annual')),
+    language text NOT NULL DEFAULT 'en' CHECK (language IN ('en','de','pt-PT')),
+    status text NOT NULL,
+    current_period_end timestamptz,
+    cancel_at_period_end boolean NOT NULL DEFAULT false,
+    joined_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS aom_payment_link_customer_idx ON aom_payment_link_memberships(stripe_customer_id);
+  CREATE TABLE IF NOT EXISTS aom_payment_link_delivery_outbox (
+    id uuid PRIMARY KEY,
+    stripe_subscription_id text NOT NULL REFERENCES aom_payment_link_memberships(stripe_subscription_id),
+    release_id uuid NOT NULL REFERENCES aom_releases(id),
+    kind text NOT NULL CHECK (kind IN ('welcome','release')),
+    language text NOT NULL CHECK (language IN ('en','de','pt-PT')),
+    state text NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','processing','sent','retry','failed','cancelled')),
+    attempts integer NOT NULL DEFAULT 0,
+    next_attempt_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    provider_message_id text,
+    UNIQUE(stripe_subscription_id, release_id)
+  );
+  CREATE INDEX IF NOT EXISTS aom_link_delivery_pending_idx ON aom_payment_link_delivery_outbox(state,next_attempt_at);
   CREATE TABLE IF NOT EXISTS member_sessions (
     token_hash text PRIMARY KEY,
     member_id uuid NOT NULL REFERENCES members(id),
@@ -572,7 +600,7 @@ let deliveryBusy = false;
 async function deliverDueBooks() {
   if (deliveryBusy || !pool || !process.env.AOM_RESEND_API_KEY || !process.env.AOM_FROM_EMAIL) return;
   deliveryBusy = true;
-  try { await processDueDeliveries(pool); }
+  try { await processDueDeliveries(pool); await processPaymentLinkDeliveries(pool); }
   catch (error) { console.error('Automatic book delivery failed', error?.code || error?.name); }
   finally { deliveryBusy = false; }
 }
