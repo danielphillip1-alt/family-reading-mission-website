@@ -1,6 +1,6 @@
 import { timingSafeEqual, createHash } from 'node:crypto';
-import { signBookDownload } from './private-storage.mjs';
-import { selectLanguage } from './delivery-rules.mjs';
+
+
 
 const LANGUAGES = new Set(['en','de','pt-PT']);
 
@@ -73,16 +73,36 @@ export async function handleBooks(req,res,url,currentMember,pool){
        WHERE e.release_id=$1 AND e.language=m.preferred_language
        AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()`,[dl[1],member.id]);
     if(!q.rowCount){reply(res,404,{error:'Edition not available in your language'});return true;}
-    if(!process.env.AOM_S3_BUCKET){reply(res,503,{error:'Private books storage not configured'});return true;}
-    const signed=signBookDownload({endpoint:process.env.AOM_S3_ENDPOINT,region:process.env.AOM_S3_REGION||'auto',bucket:process.env.AOM_S3_BUCKET,key:q.rows[0].private_object_key,accessKeyId:process.env.AOM_S3_ACCESS_KEY_ID,secretAccessKey:process.env.AOM_S3_SECRET_ACCESS_KEY,seconds:120});
-    res.writeHead(302,{Location:signed,'Cache-Control':'no-store'});res.end();return true;
+    const stored=await pool.query('SELECT pdf_content FROM aom_book_files WHERE storage_key=$1',[q.rows[0].private_object_key]);
+    if(!stored.rowCount){reply(res,503,{error:'Approved PDF not yet uploaded'});return true;}
+    res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="authors-on-a-mission.pdf"','Content-Length':stored.rows[0].pdf_content.length,
+      'Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff'});
+    res.end(stored.rows[0].pdf_content);return true;
+  }
+  if(path==='/api/admin/upload-pdf' && req.method==='POST'){
+    if(!authorized(req)){reply(res,403,{error:'Unauthorized'});return true;}
+    const key=req.headers['x-aom-storage-key'];
+    if(typeof key!=='string'||!/^books\/[a-z0-9/_-]+\.pdf$/.test(key)||key.includes('..')){
+      reply(res,400,{error:'Invalid private book key'});return true;
+    }
+    const parts=[];let n=0;
+    try{
+      for await(const chunk of req){n+=chunk.length;if(n>12582912)throw new Error('PDF exceeds 12 MB');parts.push(chunk);}
+      const pdf=Buffer.concat(parts);
+      if(pdf.length<100||pdf.subarray(0,5).toString()!=='%PDF-')throw Error('Not a PDF');
+      const hash=createHash('sha256').update(pdf).digest('hex');
+      await pool.query(`INSERT INTO aom_book_files(storage_key,pdf_content,sha256)
+        VALUES($1,$2,$3) ON CONFLICT (storage_key) DO UPDATE SET
+        pdf_content=excluded.pdf_content,sha256=excluded.sha256`,[key,pdf,hash]);
+      reply(res,201,{storageKey:key,sha256:hash,bytes:pdf.length});
+    }catch(e){reply(res,400,{error:e.message});}return true;
   }
   if(path==='/api/admin/releases' && req.method==='POST'){
     if(!authorized(req)){reply(res,403,{error:'Unauthorized'});return true;}
     let body;try{body=await parseJSON(req);}catch{reply(res,400,{error:'Invalid JSON'});return true;}
     if(typeof body.slug!=='string'||!/^[a-z0-9-]{3,80}$/.test(body.slug)||typeof body.publishAt!=='string'||!Number.isFinite(Date.parse(body.publishAt))){reply(res,400,{error:'Invalid release'});return true;}
     const editions=body.editions||{};
-    if(!LANGUAGES.size||![...LANGUAGES].every(l=>typeof editions[l]?.key==='string' && editions[l].key.startsWith('books/') && /^[a-f\d]{64}$/.test(editions[l]?.sha256||''))){
+    if(![...LANGUAGES].every(l=>typeof editions[l]?.key==='string' && editions[l].key.startsWith('books/') && /^[a-f\d]{64}$/.test(editions[l]?.sha256||''))){
       reply(res,400,{error:'Three approved editions required'});return true;
     }
     const client=await pool.connect();
