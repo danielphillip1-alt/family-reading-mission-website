@@ -1,0 +1,23 @@
+name: Authors On A Mission membership checks
+on:
+  push:
+    branches: [production-membership, stripe-sandbox-membership]
+  pull_request:
+    branches: [main, production-membership]
+jobs:
+  verify-member-backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: member/package-lock.json
+      - run: npm ci --prefix member
+      - run: npm test --prefix member
+      - run: node --check member/server.mjs
+      - run: node --check member/book-delivery.mjs
+      - run: node --check member/stripe-webhook.mjs
