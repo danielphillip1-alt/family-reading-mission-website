@@ -53,6 +53,7 @@ if (pool) await pool.query(`
     cancel_at_period_end boolean NOT NULL DEFAULT false,
     updated_at timestamptz NOT NULL DEFAULT now()
   );
+  ALTER TABLE members ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
   ALTER TABLE members ADD COLUMN IF NOT EXISTS preferred_language text NOT NULL DEFAULT 'en'
     CHECK (preferred_language IN ('en','de','pt-PT'));
   CREATE TABLE IF NOT EXISTS aom_releases (
