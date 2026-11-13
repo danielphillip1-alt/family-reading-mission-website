@@ -12,6 +12,9 @@ import {handlePurchaseDelivery} from './instant-book.mjs';
 import {testFirstBookDelivery} from './delivery-smoke.mjs';
 
 
+// Render environment variable names are case-sensitive; accept the user's existing key.
+if (!process.env.AOM_RESEND_API_KEY && process.env.AOM_Resend_API_KEY)
+ process.env.AOM_RESEND_API_KEY = process.env.AOM_Resend_API_KEY;
 const deriveKey = promisify(scrypt);
 const { DATABASE_URL, STRIPE_PRICE_ID, STRIPE_ANNUAL_PRICE_ID, APP_URL } = process.env;
 // Accept well-known Stripe secret-key environment names without exposing any key.
@@ -615,8 +618,6 @@ async function deliverDueBooks() {
   catch (error) { console.error('Automatic book delivery failed', error?.code || error?.name); }
   finally { deliveryBusy = false; }
 }
-const mailEnvNames=Object.keys(process.env).filter(k=>/RESEND|SMTP|AOM_FROM|EMAIL_API|EMAIL_KEY/i.test(k)).sort();
-console.log('Email environment variable names present:',mailEnvNames.join(',')||'(none)');
 const stripePermissions = { checkoutRead: false, subscriptionRead: false };
 async function verifyStripeReadPermissions() {
  if(!stripe) return;
