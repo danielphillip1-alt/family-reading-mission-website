@@ -329,7 +329,7 @@ const server = createServer(async (req, res) => {
       }
       return send(res, 200, body, type);
     }
-    if (!pool) return send(res, 503, page('Member setup pending', '<p>The sandbox database connection still needs to be configured.</p>'));
+    if (!pool) return send(res, 503, page('Member setup pending', '<p>The membership database connection is temporarily unavailable.</p>'));
     if (pathname.startsWith('/api/') && await handleBooks(req,res,url,currentMember,pool)) return;
     if (pathname === '/register' || pathname === '/signin') {
       if (req.method === 'GET') return send(res, 200, authForm(pathname === '/register'));
@@ -428,6 +428,19 @@ const server = createServer(async (req, res) => {
         return redirect(res, '/');
       }
       if (!stripe || !STRIPE_PRICE_ID) return send(res, 503, page('Checkout setup pending', '<p>The Stripe payment configuration is not ready.</p><a href="/member">Back to membership</a>'));
+      if (pathname === '/checkout' && productionMode) {
+        const inventory = await pool.query(`SELECT 1 FROM aom_releases r
+          JOIN aom_release_editions e ON e.release_id=r.id
+          JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256
+          WHERE r.status='published' AND r.published_at<=now()
+          AND r.published_at >= date_trunc('year', now() - interval '10 months') + interval '10 months'
+          AND e.approved_at IS NOT NULL
+          GROUP BY r.id HAVING COUNT(DISTINCT e.language)=3 LIMIT 1`);
+        if (!inventory.rowCount) return send(res, 503, page('Books being prepared',
+          '<p>Membership checkout will open once the first approved book is available in English, German, and Portuguese.</p><a href="/">Return to the website</a>'));
+        if (!process.env.AOM_RESEND_API_KEY || !process.env.AOM_FROM_EMAIL) return send(res, 503, page('Email delivery being prepared',
+          '<p>Membership checkout will open when automatic book delivery is connected.</p><a href="/">Return to the website</a>'));
+      }
       if (pathname === '/checkout') {
         const parts = [];
         let length = 0;
