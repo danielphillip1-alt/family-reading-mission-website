@@ -608,7 +608,7 @@ let deliveryBusy = false;
 async function deliverDueBooks() {
   if (deliveryBusy || !pool || !mailConfigured()) return;
   deliveryBusy = true;
-  try { await processDueDeliveries(pool); }
+  try { const result = await processDueDeliveries(pool); if (result?.processed || result?.failed) console.log('Book email delivery result', JSON.stringify(result)); }
   catch (error) { console.error('Automatic book delivery failed', error?.code || error?.name); }
   finally { deliveryBusy = false; }
 }
