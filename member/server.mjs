@@ -8,6 +8,7 @@ import { handleStripeWebhook } from './stripe-webhook.mjs';
 import { handleBooks, processDueDeliveries } from './book-delivery.mjs';
 import { processPaymentLinkDeliveries } from './payment-link-delivery.mjs';
 import {mailConfigured} from './mail.mjs';
+import {importApprovedBookOne} from './import-approved-books.mjs';
 
 
 const deriveKey = promisify(scrypt);
@@ -613,3 +614,10 @@ async function deliverDueBooks() {
 server.listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
 setInterval(deliverDueBooks, 60_000).unref();
 setTimeout(deliverDueBooks, 5_000).unref();
+startupMigrations.then(async()=>{
+ if(!schemaReady)return;
+ try{
+  const result=await importApprovedBookOne(pool);
+  if(result.imported){console.log('Approved customer Book One PDFs imported:',result.editions.join(','));await deliverDueBooks();}
+ }catch(e){console.error('Approved customer book import failed:',e?.message||e?.code);}
+});
