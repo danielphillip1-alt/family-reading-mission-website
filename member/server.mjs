@@ -68,6 +68,13 @@ if (pool) await pool.query(`
     approved_at timestamptz,
     PRIMARY KEY (release_id,language)
   );
+  CREATE TABLE IF NOT EXISTS aom_book_files (
+    storage_key text PRIMARY KEY,
+    pdf_content bytea NOT NULL,
+    sha256 text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT aom_pdf_size CHECK (octet_length(pdf_content) > 100 AND octet_length(pdf_content) <= 12582912)
+  );
   CREATE TABLE IF NOT EXISTS aom_delivery_outbox (
     id uuid PRIMARY KEY,
     release_id uuid NOT NULL REFERENCES aom_releases(id),
