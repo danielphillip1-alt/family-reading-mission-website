@@ -7,6 +7,7 @@ import Stripe from 'stripe';
 import { handleStripeWebhook } from './stripe-webhook.mjs';
 import { handleBooks, processDueDeliveries } from './book-delivery.mjs';
 import {mailConfigured} from './mail.mjs';
+import {handleLegalRequest} from './legal-requests.mjs';
 import {importApprovedBookOne} from './import-approved-books.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
 import {testFirstBookDelivery,testTranslatedBooksDelivery} from './delivery-smoke.mjs';
@@ -181,6 +182,25 @@ const startupMigrations = pool ? pool.query(`
     UNIQUE(stripe_subscription_id, release_id)
   );
   CREATE INDEX IF NOT EXISTS aom_link_delivery_pending_idx ON aom_payment_link_delivery_outbox(state,next_attempt_at);
+  CREATE TABLE IF NOT EXISTS aom_legal_requests (
+    id uuid PRIMARY KEY,
+    kind text NOT NULL CHECK(kind IN ('cancel','withdraw')),
+    status text NOT NULL CHECK(status IN ('review','received')),
+    name text NOT NULL,
+    member_email text NOT NULL,
+    confirmation_email text NOT NULL,
+    contract text NOT NULL,
+    termination text NOT NULL,
+    effective text NOT NULL,
+    reason text,
+    order_reference text,
+    review_token uuid,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    received_at timestamptz,
+    acknowledgement_sent boolean NOT NULL DEFAULT false,
+    operations_notified boolean NOT NULL DEFAULT false
+  );
+  CREATE INDEX IF NOT EXISTS aom_legal_received_idx ON aom_legal_requests(status,received_at);
   CREATE TABLE IF NOT EXISTS member_sessions (
     token_hash text PRIMARY KEY,
     member_id uuid NOT NULL REFERENCES members(id),
@@ -413,6 +433,7 @@ const server = createServer(async (req, res) => {
       return handleStripeWebhook({req,res,stripe,pool,secret:process.env.STRIPE_WEBHOOK_SECRET});
     }
     if (req.method === 'POST' && !pathname.startsWith('/api/admin/') && req.headers.origin !== appUrl.origin) return send(res, 403, 'Request rejected.');
+    if (pathname.startsWith('/legal/') && await handleLegalRequest(req,res,url,pool)) return;
     if (pathname === '/join' && req.method === 'GET') return redirect(res,
       await billingReady() ? '/register' : '/early-access');
     if (pathname === '/health' && req.method === 'GET') return send(res, 200, 'ok', 'text/plain');
