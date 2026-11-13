@@ -40,3 +40,23 @@ export function releasedBooksInCurrentCycle(releases, language, now = new Date()
     })
     .sort((a,b)=>new Date(a.publishedAt).getTime()-new Date(b.publishedAt).getTime());
 }
+
+/**
+ * An annual subscription renews 12 months after purchase, but book publication
+ * always runs on a separate November 1–October 31 cycle.
+ * Every active new subscriber receives all approved, published books from the
+ * current cycle, regardless of when they subscribed.
+ */
+export function readingCycleStart(now = new Date()) {
+  const year = now.getUTCFullYear() - (now.getUTCMonth() < 10 ? 1 : 0);
+  return new Date(Date.UTC(year, 10, 1));
+}
+export function publishedBooksForCurrentCycle(releases, now = new Date(), language = 'en') {
+  const from = readingCycleStart(now);
+  return releases.filter(release => {
+    const releaseDate = new Date(release.publishedAt);
+    return Number.isFinite(releaseDate.valueOf())
+      && releaseDate >= from && releaseDate <= now
+      && approvedEdition(release, language) !== null;
+  }).sort((a,b) => new Date(a.publishedAt) - new Date(b.publishedAt));
+}
