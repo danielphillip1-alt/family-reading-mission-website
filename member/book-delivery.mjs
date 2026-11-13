@@ -157,6 +157,11 @@ export async function handleBooks(req,res,url,currentMember,pool){
       const q=await client.query(`INSERT INTO aom_releases(id,slug,status,published_at)
         VALUES(gen_random_uuid(),$1,'approved',$2) ON CONFLICT (slug) DO NOTHING RETURNING id`,[body.slug,body.publishAt]);
       if(!q.rowCount)throw new Error('Release slug already exists');
+      for (const lang of LANGUAGES) {
+        const edition=editions[lang];
+        const file=await client.query('SELECT 1 FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',[edition.key,edition.sha256]);
+        if(!file.rowCount) throw Error('Approved '+lang+' PDF is not uploaded or its checksum does not match');
+      }
       for(const lang of LANGUAGES)await client.query(`INSERT INTO aom_release_editions
         (release_id,language,private_object_key,sha256,approved_at)
         VALUES($1,$2,$3,$4,now())`,[q.rows[0].id,lang,editions[lang].key,editions[lang].sha256]);
