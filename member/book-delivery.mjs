@@ -43,6 +43,48 @@ const COPY={
   'pt-PT':{subject:'O seu novo livro da Authors On A Mission está disponível',greeting:'O seu novo livro está disponível. Inicie sessão e descarregue-o aqui:'}
 };
 function escapeHTML(str){return String(str).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+export async function processDueDeliveries(pool) {
+  if (!process.env.AOM_RESEND_API_KEY || !process.env.AOM_FROM_EMAIL) return {configured:false};
+  await pool.query(`UPDATE aom_releases SET status='published' WHERE status='approved' AND published_at<=now()`);
+  await pool.query(`INSERT INTO aom_delivery_outbox
+    (id,release_id,member_id,kind,language)
+    SELECT gen_random_uuid(),r.id,m.id,'release',m.preferred_language
+    FROM aom_releases r CROSS JOIN members m
+    JOIN aom_release_editions e ON e.release_id=r.id AND e.language=m.preferred_language
+    WHERE r.status='published' AND r.published_at<=now() AND e.approved_at IS NOT NULL
+    AND EXISTS(SELECT 1 FROM aom_subscription_states s WHERE s.member_id=m.id
+        AND s.status IN ('active','trialing') AND s.current_period_end>now())
+    ON CONFLICT (release_id,member_id,kind) DO NOTHING`);
+  const batch=await pool.query(`WITH picked AS (
+     SELECT id FROM aom_delivery_outbox WHERE state IN ('pending','retry')
+     AND next_attempt_at<=now() ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT 30
+  ) UPDATE aom_delivery_outbox o SET state='processing',attempts=attempts+1
+    FROM picked WHERE o.id=picked.id RETURNING o.*`);
+  let sent=0,failed=0;
+  for(const task of batch.rows) {
+    try{
+      if(!await entitled(pool,task.member_id)){await pool.query('UPDATE aom_delivery_outbox SET state=$1 WHERE id=$2',['cancelled',task.id]);continue;}
+      const m=await pool.query('SELECT email,preferred_language FROM members WHERE id=$1',[task.member_id]);
+      if(!m.rowCount||m.rows[0].preferred_language!==task.language){await pool.query("UPDATE aom_delivery_outbox SET state='cancelled' WHERE id=$1",[task.id]);continue;}
+      const l=await pool.query(`SELECT 1 FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id
+        WHERE r.id=$1 AND r.status='published' AND e.language=$2 AND e.approved_at IS NOT NULL`,[task.release_id,task.language]);
+      if(!l.rowCount){throw Error('Edition unavailable');}
+      const copy=COPY[task.language];
+      const link=(process.env.AOM_PUBLIC_MEMBER_URL||'https://www.theauthorsmission.de')+'/member';
+      const html='<p>'+escapeHTML(copy.greeting)+'</p><p><a href="'+escapeHTML(link)+'">'+escapeHTML(link)+'</a></p>';
+      const response=await sendResend({email:m.rows[0].email,subject:copy.subject,html},task.id);
+      await pool.query(`UPDATE aom_delivery_outbox SET state='sent',provider_message_id=$1 WHERE id=$2`,[response.id||null,task.id]);sent++;
+    }catch(e){
+      await pool.query(`UPDATE aom_delivery_outbox SET state=CASE WHEN attempts>=5 THEN 'failed' ELSE 'retry' END,
+        next_attempt_at=now()+LEAST(3600,POWER(2,LEAST(attempts,10))*60)*interval '1 second'
+        WHERE id=$1`,[task.id]);failed++;
+    }
+  }
+
+  return {configured:true,processed:batch.rowCount,sent,failed};
+}
+
 export async function handleBooks(req,res,url,currentMember,pool){
   const path=url.pathname;
   if(!pool){reply(res,503,{error:'Database unavailable'});return true;}
@@ -125,42 +167,8 @@ export async function handleBooks(req,res,url,currentMember,pool){
   if(path==='/api/admin/deliver' && req.method==='POST'){
     if(!authorized(req)){reply(res,403,{error:'Unauthorized'});return true;}
     if(!process.env.AOM_RESEND_API_KEY||!process.env.AOM_FROM_EMAIL){reply(res,503,{error:'Email service not configured'});return true;}
-    await pool.query(`UPDATE aom_releases SET status='published' WHERE status='approved' AND published_at<=now()`);
-    await pool.query(`INSERT INTO aom_delivery_outbox
-      (id,release_id,member_id,kind,language)
-      SELECT gen_random_uuid(),r.id,m.id,'release',m.preferred_language
-      FROM aom_releases r CROSS JOIN members m
-      JOIN aom_release_editions e ON e.release_id=r.id AND e.language=m.preferred_language
-      WHERE r.status='published' AND r.published_at<=now() AND e.approved_at IS NOT NULL
-      AND EXISTS(SELECT 1 FROM aom_subscription_states s WHERE s.member_id=m.id
-          AND s.status IN ('active','trialing') AND s.current_period_end>now())
-      ON CONFLICT (release_id,member_id,kind) DO NOTHING`);
-    const batch=await pool.query(`WITH picked AS (
-       SELECT id FROM aom_delivery_outbox WHERE state IN ('pending','retry')
-       AND next_attempt_at<=now() ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT 30
-    ) UPDATE aom_delivery_outbox o SET state='processing',attempts=attempts+1
-      FROM picked WHERE o.id=picked.id RETURNING o.*`);
-    let sent=0,failed=0;
-    for(const task of batch.rows) {
-      try{
-        if(!await entitled(pool,task.member_id)){await pool.query('UPDATE aom_delivery_outbox SET state=$1 WHERE id=$2',['cancelled',task.id]);continue;}
-        const m=await pool.query('SELECT email,preferred_language FROM members WHERE id=$1',[task.member_id]);
-        if(!m.rowCount||m.rows[0].preferred_language!==task.language){await pool.query("UPDATE aom_delivery_outbox SET state='cancelled' WHERE id=$1",[task.id]);continue;}
-        const l=await pool.query(`SELECT 1 FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id
-          WHERE r.id=$1 AND r.status='published' AND e.language=$2 AND e.approved_at IS NOT NULL`,[task.release_id,task.language]);
-        if(!l.rowCount){throw Error('Edition unavailable');}
-        const copy=COPY[task.language];
-        const link=(process.env.AOM_PUBLIC_MEMBER_URL||'https://www.theauthorsmission.de')+'/member';
-        const html='<p>'+escapeHTML(copy.greeting)+'</p><p><a href="'+escapeHTML(link)+'">'+escapeHTML(link)+'</a></p>';
-        const response=await sendResend({email:m.rows[0].email,subject:copy.subject,html},task.id);
-        await pool.query(`UPDATE aom_delivery_outbox SET state='sent',provider_message_id=$1 WHERE id=$2`,[response.id||null,task.id]);sent++;
-      }catch(e){
-        await pool.query(`UPDATE aom_delivery_outbox SET state=CASE WHEN attempts>=5 THEN 'failed' ELSE 'retry' END,
-          next_attempt_at=now()+LEAST(3600,POWER(2,LEAST(attempts,10))*60)*interval '1 second'
-          WHERE id=$1`,[task.id]);failed++;
-      }
-    }
-    reply(res,200,{processed:batch.rowCount,sent,failed});return true;
+    const summary = await processDueDeliveries(pool);
+    reply(res,200,summary);return true;
   }
   return false;
 }
