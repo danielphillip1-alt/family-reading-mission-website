@@ -1,15 +1,9 @@
 import { timingSafeEqual, createHash } from 'node:crypto';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { signBookDownload } from './private-storage.mjs';
 import { selectLanguage } from './delivery-rules.mjs';
 
 const LANGUAGES = new Set(['en','de','pt-PT']);
-const s3 = process.env.AOM_S3_BUCKET ? new S3Client({
-  region:process.env.AOM_S3_REGION||'auto',
-  endpoint:process.env.AOM_S3_ENDPOINT,
-  forcePathStyle:Boolean(process.env.AOM_S3_ENDPOINT),
-  credentials:{accessKeyId:process.env.AOM_S3_ACCESS_KEY_ID||'',secretAccessKey:process.env.AOM_S3_SECRET_ACCESS_KEY||''}
-}) : null;
+
 const reply=(res,status,obj)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(obj));};
 const languageOK=(value)=>LANGUAGES.has(value);
 const authorized=(req)=>{
@@ -79,8 +73,8 @@ export async function handleBooks(req,res,url,currentMember,pool){
        WHERE e.release_id=$1 AND e.language=m.preferred_language
        AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()`,[dl[1],member.id]);
     if(!q.rowCount){reply(res,404,{error:'Edition not available in your language'});return true;}
-    if(!s3||!process.env.AOM_S3_BUCKET){reply(res,503,{error:'Private books storage not configured'});return true;}
-    const signed=await getSignedUrl(s3,new GetObjectCommand({Bucket:process.env.AOM_S3_BUCKET,Key:q.rows[0].private_object_key,ResponseContentType:'application/pdf',ResponseContentDisposition:'attachment'}),{expiresIn:120});
+    if(!process.env.AOM_S3_BUCKET){reply(res,503,{error:'Private books storage not configured'});return true;}
+    const signed=signBookDownload({endpoint:process.env.AOM_S3_ENDPOINT,region:process.env.AOM_S3_REGION||'auto',bucket:process.env.AOM_S3_BUCKET,key:q.rows[0].private_object_key,accessKeyId:process.env.AOM_S3_ACCESS_KEY_ID,secretAccessKey:process.env.AOM_S3_SECRET_ACCESS_KEY,seconds:120});
     res.writeHead(302,{Location:signed,'Cache-Control':'no-store'});res.end();return true;
   }
   if(path==='/api/admin/releases' && req.method==='POST'){
