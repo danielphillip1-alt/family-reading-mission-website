@@ -31,7 +31,7 @@ export async function importApprovedBookOne(pool){
     [item.key,item.pdf,item.hash]);
   const slug='zachary-my-unique-hat-2026-11';
   const id=await client.query(
-    "INSERT INTO aom_releases(id,slug,status,published_at) VALUES(gen_random_uuid(),$1,'approved',$2) ON CONFLICT(slug) DO UPDATE SET published_at=excluded.published_at RETURNING id",
+    "INSERT INTO aom_releases(id,slug,status,published_at) VALUES(gen_random_uuid(),$1,'published',$2) ON CONFLICT(slug) DO UPDATE SET status='published',published_at=excluded.published_at RETURNING id",
     [slug,'2026-11-01T00:00:00Z']);
   const releaseId=id.rows[0].id;
   for(const item of staged)await client.query(
