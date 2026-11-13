@@ -348,7 +348,7 @@ const server = createServer(async (req, res) => {
       return send(res, 200, page('Your test membership', `
         ${notice && `<p role="status">${notice}</p>`}
         <p>Choose your plan. Both renew automatically unless you cancel before your next renewal date. Cancel through Manage membership and keep access until the paid period ends.</p>
-        <section aria-labelledby="reading-year"><h2 id="reading-year">Your reading year: November ${cycleLabel} – October ${cycleLabel+1}</h2>
+        <section aria-labelledby="reading-year"><h2 id="reading-year" data-released="${readyCount}">Your reading year: November ${cycleLabel} – October ${cycleLabel+1}</h2>
         <p><strong>${readyCount} approved ${readyCount===1?'book has':'books have'} been released</strong> so far in this reading cycle. All released books available in your selected language are unlocked with an active membership. New books and their accompanying reading activities become available as they are published. The November reading cycle is separate from the billing anniversary: a yearly subscription renews 12 months after you sign up, not automatically every November.</p>
         <p>Example: If you join in March after four monthly books have been published (November through February), all four are available immediately. You then receive new publications as they are released while your subscription is active.</p></section>
         <form class="plan-checkout" method="post" action="/checkout">
@@ -375,7 +375,7 @@ const server = createServer(async (req, res) => {
               e.preventDefault();pending=f;
               const annual=f.querySelector('[name=plan]').value==='annual';
               document.getElementById('plan-dialog-text').textContent=
-                '${readyCount} book(s) have been published in the current November-to-October reading cycle. You can access previous published books immediately, with new releases arriving during your active membership. '+
+                String(document.getElementById('reading-year').dataset.released) + ' approved book(s) have been released in the current November-to-October reading cycle. You can access previously published books immediately, with new releases arriving during your active membership. '+
                 (annual?'€39.90 will be charged now and automatically every 12 months unless you cancel.':'€3.99 will be charged now and automatically every month unless you cancel.');
               d.showModal();
             }));
