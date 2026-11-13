@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import pg from 'pg';
 import Stripe from 'stripe';
+import { handleStripeWebhook } from './stripe-webhook.mjs';
+import { handleBooks } from './book-delivery.mjs';
 
 const deriveKey = promisify(scrypt);
 const { DATABASE_URL, STRIPE_API_KEY, STRIPE_PRICE_ID, APP_URL } = process.env;
@@ -36,6 +38,56 @@ if (pool) await pool.query(`
     checkout_attempt uuid,
     checkout_attempt_at timestamptz
   );
+  CREATE TABLE IF NOT EXISTS aom_stripe_webhook_events (
+    stripe_event_id text PRIMARY KEY,
+    event_type text NOT NULL,
+    processed_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE TABLE IF NOT EXISTS aom_subscription_states (
+    stripe_subscription_id text PRIMARY KEY,
+    member_id uuid NOT NULL REFERENCES members(id),
+    stripe_customer_id text NOT NULL,
+    status text NOT NULL,
+    current_period_end timestamptz,
+    cancel_at_period_end boolean NOT NULL DEFAULT false,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+  ALTER TABLE members ADD COLUMN IF NOT EXISTS preferred_language text NOT NULL DEFAULT 'en'
+    CHECK (preferred_language IN ('en','de','pt-PT'));
+  CREATE TABLE IF NOT EXISTS aom_releases (
+    id uuid PRIMARY KEY,
+    slug text NOT NULL UNIQUE,
+    status text NOT NULL CHECK (status IN ('draft','approved','published','withdrawn')),
+    published_at timestamptz
+  );
+  CREATE TABLE IF NOT EXISTS aom_release_editions (
+    release_id uuid NOT NULL REFERENCES aom_releases(id) ON DELETE CASCADE,
+    language text NOT NULL CHECK (language IN ('en','de','pt-PT')),
+    private_object_key text NOT NULL,
+    sha256 text NOT NULL,
+    approved_at timestamptz,
+    PRIMARY KEY (release_id,language)
+  );
+  CREATE TABLE IF NOT EXISTS aom_book_files (
+    storage_key text PRIMARY KEY,
+    pdf_content bytea NOT NULL,
+    sha256 text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT aom_pdf_size CHECK (octet_length(pdf_content) > 100 AND octet_length(pdf_content) <= 12582912)
+  );
+  CREATE TABLE IF NOT EXISTS aom_delivery_outbox (
+    id uuid PRIMARY KEY,
+    release_id uuid NOT NULL REFERENCES aom_releases(id),
+    member_id uuid NOT NULL REFERENCES members(id),
+    kind text NOT NULL CHECK (kind IN ('welcome','release')),
+    language text NOT NULL CHECK (language IN ('en','de','pt-PT')),
+    state text NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','processing','sent','retry','failed','cancelled')),
+    attempts integer NOT NULL DEFAULT 0,
+    next_attempt_at timestamptz NOT NULL DEFAULT now(),
+    provider_message_id text,
+    UNIQUE (release_id,member_id,kind)
+  );
+  CREATE INDEX IF NOT EXISTS aom_delivery_pending_idx ON aom_delivery_outbox(state,next_attempt_at);
   CREATE TABLE IF NOT EXISTS member_sessions (
     token_hash text PRIMARY KEY,
     member_id uuid NOT NULL REFERENCES members(id),
@@ -238,7 +290,10 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, appUrl);
     const { pathname } = url;
-    if (req.method === 'POST' && req.headers.origin !== appUrl.origin) return send(res, 403, 'Request rejected.');
+    if (pathname === '/stripe/webhook' && req.method === 'POST') {
+      return handleStripeWebhook({req,res,stripe,pool,secret:process.env.STRIPE_WEBHOOK_SECRET});
+    }
+    if (req.method === 'POST' && !pathname.startsWith('/api/admin/') && req.headers.origin !== appUrl.origin) return send(res, 403, 'Request rejected.');
     if (pathname === '/health' && req.method === 'GET') return send(res, 200, 'ok', 'text/plain');
     if (files.has(pathname) && req.method === 'GET') {
       const [file, type] = files.get(pathname);
@@ -250,6 +305,7 @@ const server = createServer(async (req, res) => {
       return send(res, 200, body, type);
     }
     if (!pool) return send(res, 503, page('Member setup pending', '<p>The sandbox database connection still needs to be configured.</p>'));
+    if (pathname.startsWith('/api/') && await handleBooks(req,res,url,currentMember,pool)) return;
     if (pathname === '/register' || pathname === '/signin') {
       if (req.method === 'GET') return send(res, 200, authForm(pathname === '/register'));
       if (req.method === 'POST') return await handleAuth(req, res, pathname === '/register');
@@ -263,6 +319,36 @@ const server = createServer(async (req, res) => {
         ${notice && `<p role="status">${notice}</p>`}
         <form method="post" action="/checkout"><button>Join for €3.99/month (test)</button></form>
         ${member.stripe_customer_id ? '<form method="post" action="/portal"><button>Manage membership (test)</button></form>' : ''}
+        <section id="aom-books-panel">
+          <h2>Your books</h2>
+          <label for="reading-language">Reading language</label>
+          <select id="reading-language"><option value="en">English</option><option value="de">Deutsch</option><option value="pt-PT">Português</option></select>
+          <button type="button" id="save-language">Save language</button>
+          <p id="book-status" role="status">Checking membership...</p>
+          <ul id="book-list"></ul>
+        </section>
+        <script>
+        (async()=>{
+          const status=document.getElementById('book-status'),list=document.getElementById('book-list'),choice=document.getElementById('reading-language');
+          async function reload(){
+            const resp=await fetch('/api/books',{credentials:'same-origin'});
+            const data=await resp.json();
+            list.textContent='';
+            if(!resp.ok){status.textContent=data.error||'Books unavailable';return;}
+            choice.value=data.language;
+            status.textContent=data.books.length ? 'Choose a book to download:' : 'Your first book is not available yet.';
+            for(const book of data.books){
+              const item=document.createElement('li'),link=document.createElement('a');
+              link.href=book.download;link.textContent=book.slug.replaceAll('-',' ');item.append(link);list.append(item);
+            }
+          }
+          document.getElementById('save-language').addEventListener('click',async()=>{
+            const resp=await fetch('/api/me/language',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:choice.value})});
+            if(resp.ok)await reload();else status.textContent='Language update failed.';
+          });
+          await reload();
+        })();
+        </script>
         <form method="post" action="/signout"><button>Sign out</button></form>`));
     }
     if (req.method === 'POST' && ['/checkout', '/portal', '/signout'].includes(pathname)) {
