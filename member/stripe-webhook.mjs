@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { capturePaymentLinkEvent } from './payment-link-delivery.mjs';
 const RELEVANT_EVENTS = new Set(['checkout.session.completed','customer.subscription.created','customer.subscription.updated','customer.subscription.deleted','invoice.paid','invoice.payment_failed']);
 const MAX_PAYLOAD=1024*1024;
 export async function readRawBody(req) {
@@ -61,6 +62,7 @@ export async function handleStripeWebhook({req,res,stripe,pool,secret}) {
       await client.query(`UPDATE aom_direct_subscriptions SET status=$2,current_period_end=$3,updated_at=now()
          WHERE stripe_subscription_id=$1`,[subscriptionId,subscription.status,period?new Date(period*1000):null]);
       const stripeMemberId=subscription.metadata?.member_id||null;
+      await capturePaymentLinkEvent(client,stripe,event,subscription);
       const matching=await client.query(
         'SELECT id FROM members WHERE stripe_customer_id=$1 OR (id::text=$2 AND stripe_customer_id IS NULL) LIMIT 1',
         [customerId,stripeMemberId||'']);
