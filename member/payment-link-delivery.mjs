@@ -19,7 +19,8 @@ export async function capturePaymentLinkEvent(client, stripe, event, subscriptio
     const email = String(data.customer_details?.email ?? data.customer_email ?? '').trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw Error('Stripe payment link checkout is missing a valid email');
     const period = subscription?.items?.data?.[0]?.current_period_end ?? subscription?.current_period_end;
-    const language = LANGUAGES.has(data.metadata?.language) ? data.metadata.language : 'en';
+    const selected = data.custom_fields?.find(field => field.key === 'booklanguage')?.dropdown?.value;
+    const language = selected === 'pt' ? 'pt-PT' : LANGUAGES.has(selected) ? selected : 'en';
     const status = subscription?.status ?? 'incomplete';
     const customer = typeof data.customer === 'string' ? data.customer : data.customer.id;
     await client.query(`INSERT INTO aom_payment_link_memberships
