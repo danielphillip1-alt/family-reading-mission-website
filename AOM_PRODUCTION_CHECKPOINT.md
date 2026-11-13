@@ -53,3 +53,12 @@ ready: false
 - Live Stripe secret named mixed-case `Stripe_API_Key` in Render; production code now recognizes it. Verified stripe_configured=true after deploy.
 - Useful admin endpoint GET /api/admin/payment-link-subscribers authenticated with server admin Bearer token for later fulfillment.
 - No refund or billing operations have been taken.
+
+
+## Canonical customer book source — USER DIRECTIVE
+- Authoritative folder: ChatGPT Library `/Customer PDFs` (already exists and initially empty). Newest user-uploaded customer-approved PDF editions ONLY.
+- Do not import, sell, email, or deliver historical drafts, search-result PDFs, EPUB reconversions, test excerpts, or files from any other folder.
+- Book release importer must verify source is `/Customer PDFs`, preserve audit provenance and checksum, and write private storage keys under `customer-pdfs/` only. Server now rejects other prefixes.
+- New subscriptions through either live Stripe Payment Link get every published book since November 1 of the current November–October reading year, filtered to their chosen language. If five books are already released, all five must queue for that buyer. A member's billing anniversary is independent of the publication-year boundary.
+- After initial delivery, new monthly releases continue during active paid membership. Yearly plan is €39.99; monthly is €3.99. Do not infer that yearly grants all 12 titles on day one.
+- Requires approved EN, DE, pt-PT uploaded content and a verified email provider; keep exact approved content only.
