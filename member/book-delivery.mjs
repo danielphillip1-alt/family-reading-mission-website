@@ -1,3 +1,4 @@
+import {sendTransactionalMail} from './mail.mjs';
 import { timingSafeEqual, createHash } from 'node:crypto';
 
 
@@ -24,16 +25,7 @@ async function entitled(pool,memberId){
        AND current_period_end>now() LIMIT 1`,[memberId]);
   return Boolean(q.rowCount);
 }
-async function sendResend(message,idempotencyKey){
-  const key=process.env.AOM_RESEND_API_KEY,from=process.env.AOM_FROM_EMAIL;
-  if(!key||!from)throw Error('Email not configured');
-  const response=await fetch('https://api.resend.com/emails',{
-    method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json','Idempotency-Key':idempotencyKey},
-    body:JSON.stringify({from,to:[message.email],subject:message.subject,html:message.html,attachments:message.attachments})
-  });
-  if(!response.ok)throw Error('Mail provider returned '+response.status);
-  return await response.json();
-}
+async function sendResend(message,id){return sendTransactionalMail(message,id)}
 const COPY={
   en:{subject:'Your new Authors On A Mission book is ready', greeting:'Your new book is ready. Sign in and download it here:'},
   de:{subject:'Ihr neues Buch von Authors On A Mission ist da',greeting:'Ihr neues Buch ist da. Melden Sie sich an und laden Sie es hier herunter:'},
@@ -42,7 +34,7 @@ const COPY={
 function escapeHTML(str){return String(str).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 export async function processDueDeliveries(pool) {
-  if (!process.env.AOM_RESEND_API_KEY || !process.env.AOM_FROM_EMAIL) return {configured:false};
+  if (!((process.env.AOM_RESEND_API_KEY && process.env.AOM_FROM_EMAIL) || process.env.AOM_GMAIL_APP_PASSWORD)) return {configured:false};
   await pool.query(`UPDATE aom_releases r SET status='published'
     WHERE r.status='approved' AND r.published_at<=now() AND
       (SELECT COUNT(DISTINCT e.language) FROM aom_release_editions e
