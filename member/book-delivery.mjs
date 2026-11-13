@@ -227,7 +227,7 @@ export async function handleBooks(req,res,url,currentMember,pool){
   }
   if(path==='/api/admin/deliver' && req.method==='POST'){
     if(!authorized(req)){reply(res,403,{error:'Unauthorized'});return true;}
-    if(!process.env.AOM_RESEND_API_KEY||!process.env.AOM_FROM_EMAIL){reply(res,503,{error:'Email service not configured'});return true;}
+    if(!((process.env.AOM_RESEND_API_KEY&&process.env.AOM_FROM_EMAIL)||process.env.AOM_GMAIL_APP_PASSWORD)){reply(res,503,{error:'Email service not configured'});return true;}
     const summary = await processDueDeliveries(pool);
     reply(res,200,summary);return true;
   }
