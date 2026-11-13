@@ -39,3 +39,17 @@ ready: false
 - Don't claim the technical deploy proves real payment acceptance.
 - Don't repeat prior OAuth authorization; live Stripe write access was repaired and confirmed.
 - No user secret/API key should appear in chat or commit messages.
+
+## 13 Nov urgent live pricing update
+- Public site main branch now has two large side-by-side purchase cards with **real** Stripe checkout links:
+  - Monthly €3.99/month: https://buy.stripe.com/28E3cxeAY2HM1QYe89ffy00 (existing payment link plink_1UbGQ6RuZKBP2B3nVEKI0Y7h).
+  - Yearly €39.99/year: https://buy.stripe.com/8x2bJ3csQ8261QYfcdffy01 (new live price price_1UbOSVRuZKBP2B3nPcMMkq5e; link plink_1UbOT5RuZKBP2B3nKgZfg1ie).
+- Both live payment links were verified active. Both collect mandatory preferred book language (English, German, Portuguese).
+- 39.99/year saves €7.89 vs 12 monthly charges (€47.88).
+- Render backend annual Stripe price env updated to new 39.99 price.
+- Latest backend: database has direct Stripe link subscriber and delivery queue tables. Stripe webhook imports payment-link customer, language, billing status/renewals. 60-second worker queues eligible release PDFs and sends attachments directly to payer via Resend when configured.
+- Live payment collection is possible immediately; **automatic book fulfillment still blocked** until Resend transactional email API secret and real approved downloadable book editions are provided. Do not say it is active.
+- Client-facing website explicitly discloses automatic book delivery is being connected.
+- Live Stripe secret named mixed-case `Stripe_API_Key` in Render; production code now recognizes it. Verified stripe_configured=true after deploy.
+- Useful admin endpoint GET /api/admin/payment-link-subscribers authenticated with server admin Bearer token for later fulfillment.
+- No refund or billing operations have been taken.
