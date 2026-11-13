@@ -46,7 +46,11 @@ function escapeHTML(str){return String(str).replace(/[&<>"']/g,c=>({'&':'&amp;',
 
 export async function processDueDeliveries(pool) {
   if (!process.env.AOM_RESEND_API_KEY || !process.env.AOM_FROM_EMAIL) return {configured:false};
-  await pool.query(`UPDATE aom_releases SET status='published' WHERE status='approved' AND published_at<=now()`);
+  await pool.query(`UPDATE aom_releases r SET status='published'
+    WHERE r.status='approved' AND r.published_at<=now() AND
+      (SELECT COUNT(DISTINCT e.language) FROM aom_release_editions e
+       JOIN aom_book_files b ON b.storage_key=e.private_object_key AND b.sha256=e.sha256
+       WHERE e.release_id=r.id AND e.approved_at IS NOT NULL)=3`);
   await pool.query(`INSERT INTO aom_delivery_outbox
     (id,release_id,member_id,kind,language)
     SELECT gen_random_uuid(),r.id,m.id,'release',m.preferred_language
@@ -75,7 +79,7 @@ export async function processDueDeliveries(pool) {
         WHERE r.id=$1 AND r.status='published' AND e.language=$2 AND e.approved_at IS NOT NULL`,[task.release_id,task.language]);
       if(!l.rowCount){throw Error('Edition unavailable');}
       const copy=COPY[task.language];
-      const link=new URL('/member', process.env.AOM_PUBLIC_MEMBER_URL || process.env.APP_URL || 'https://authors-on-a-mission-members.onrender.com').href;
+      const link=new URL('/member', process.env.APP_URL || 'https://authors-on-a-mission-members.onrender.com').href;
       const html='<p>'+escapeHTML(copy.greeting)+'</p><p><a href="'+escapeHTML(link)+'">'+escapeHTML(link)+'</a></p>';
       const edition=l.rows[0];
       const attachment={filename:edition.slug+'-'+task.language+'.pdf',content:edition.pdf_content.toString('base64')};
