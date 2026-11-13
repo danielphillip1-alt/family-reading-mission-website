@@ -10,15 +10,16 @@ import { handleBooks } from './book-delivery.mjs';
 const deriveKey = promisify(scrypt);
 const { DATABASE_URL, STRIPE_API_KEY, STRIPE_PRICE_ID, STRIPE_ANNUAL_PRICE_ID, APP_URL } = process.env;
 const appUrl = new URL(APP_URL);
-if (STRIPE_API_KEY && !/^(rk|sk)_test_/.test(STRIPE_API_KEY)) {
-  throw new Error('The sandbox requires a Stripe test key.');
+const productionMode = process.env.AOM_ENV === 'production';
+if (STRIPE_API_KEY && !(productionMode ? /^(rk|sk)_live_/ : /^(rk|sk)_test_/).test(STRIPE_API_KEY)) {
+  throw new Error('Stripe key mode does not match the deployment environment.');
 }
 const pool = DATABASE_URL ? new pg.Pool({ connectionString: DATABASE_URL }) : null;
 const stripe = STRIPE_API_KEY && new Stripe(STRIPE_API_KEY, { maxNetworkRetries: 2, timeout: 8000 });
 const productionCookies = appUrl.protocol === 'https:' ? '; Secure' : '';
 const cookieName = productionCookies ? '__Host-aom-session' : 'aom-session';
 const sessionSeconds = 7 * 24 * 60 * 60;
-const portalConfig = 'bpc_1UbFAM2MQqTpyHGRzilc2l9Y';
+const portalConfig = process.env.STRIPE_PORTAL_CONFIGURATION_ID;
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
@@ -119,9 +120,9 @@ function page(title, body) {
 }
 
 function authForm(join, message = '') {
-  const title = join ? 'Create a test account' : 'Sign in';
+  const title = join ? (productionMode ? 'Create an account' : 'Create a test account') : 'Sign in';
   const other = join ? '<a href="/signin">Sign in</a>' : '<a href="/register">Create a test account</a>';
-  return page(title, `<p>Stripe sandbox. Use test details and a password you do not use elsewhere.</p>
+  return page(title, `<p>${productionMode ? 'Sign in to access your membership.' : 'Stripe sandbox. Use test details and a password you do not use elsewhere.'}</p>
   ${message && `<p role="alert">${message}</p>`}
   <form method="post">
     <label>Email <input name="email" type="email" autocomplete="username" required maxlength="254"></label>
@@ -263,7 +264,6 @@ async function checkout(memberId, billingPlan) {
         billing_address_collection: 'required',
         customer_update: { address: 'auto' },
         automatic_tax: { enabled: true },
-        integration_identifier: 'authors-on-a-mission-sandbox-ctvrslkp',
         success_url: new URL('/member?status=submitted', appUrl).href,
         cancel_url: new URL('/member?status=canceled', appUrl).href,
       }, { idempotencyKey: `member-checkout-${billingPlan}-${attempt}` });
@@ -306,7 +306,7 @@ const server = createServer(async (req, res) => {
       if (pool) {
         try { await pool.query('SELECT 1'); database = true; } catch { database = false; }
       }
-      const ready = configured && database;
+      const ready = configured && database && (!productionMode || Boolean(portalConfig));
       return send(res, ready ? 200 : 503, JSON.stringify({
         ready,
         database,
@@ -314,7 +314,9 @@ const server = createServer(async (req, res) => {
         annual_price: Boolean(STRIPE_ANNUAL_PRICE_ID),
         stripe_configured: Boolean(stripe),
         webhook_configured: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
-        admin_configured: Boolean(process.env.AOM_ADMIN_API_TOKEN)
+        admin_configured: Boolean(process.env.AOM_ADMIN_API_TOKEN),
+        portal_configured: Boolean(portalConfig),
+        deployment: productionMode ? 'production' : 'sandbox'
       }), 'application/json; charset=utf-8');
     }
     if (files.has(pathname) && req.method === 'GET') {
@@ -345,7 +347,7 @@ const server = createServer(async (req, res) => {
       );
       const readyCount = releaseCount.total;
       const cycleLabel = cycleStart.getUTCFullYear();
-      return send(res, 200, page('Your test membership', `
+      return send(res, 200, page(productionMode ? 'Your membership' : 'Your test membership', `
         ${notice && `<p role="status">${notice}</p>`}
         <p>Choose your plan. Both renew automatically unless you cancel before your next renewal date. Cancel through Manage membership and keep access until the paid period ends.</p>
         <section aria-labelledby="reading-year"><h2 id="reading-year" data-released="${readyCount}">Your reading year: November ${cycleLabel} – October ${cycleLabel+1}</h2>
@@ -353,11 +355,11 @@ const server = createServer(async (req, res) => {
         <p>Example: If you join in March after four monthly books have been published (November through February), all four are available immediately. You then receive new publications as they are released while your subscription is active.</p></section>
         <form class="plan-checkout" method="post" action="/checkout">
           <input type="hidden" name="plan" value="monthly">
-          <button>€3.99 per month (test) — renews monthly</button>
+          <button>€3.99 per month — renews monthly</button>
         </form>
         <form class="plan-checkout" method="post" action="/checkout">
           <input type="hidden" name="plan" value="annual">
-          <button>€39.90 per year (test) — 2 months free; renews annually</button>
+          <button>€39.90 per year — 2 months free; renews annually</button>
         </form>
         <p>Annual membership saves €7.98 (16.7%) compared with 12 monthly payments. Taxes are included where applicable.</p>
         <dialog id="aom-plan-dialog" aria-labelledby="plan-dialog-heading" style="max-width:28rem;border:1px solid #073d2e;border-radius:1rem;padding:1.5rem">
@@ -383,7 +385,7 @@ const server = createServer(async (req, res) => {
             document.getElementById('confirm-plan').onclick=()=>{if(pending)pending.submit();};
           })();
         </script>
-        ${member.stripe_customer_id ? '<form method="post" action="/portal"><button>Manage membership (test)</button></form>' : ''}
+        ${member.stripe_customer_id ? '<form method="post" action="/portal"><button>Manage membership</button></form>' : ''}
         <section id="aom-books-panel">
           <h2>Your books</h2>
           <label for="reading-language">Reading language</label>
@@ -424,7 +426,7 @@ const server = createServer(async (req, res) => {
         res.setHeader('Set-Cookie', `${cookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${productionCookies}`);
         return redirect(res, '/');
       }
-      if (!stripe || !STRIPE_PRICE_ID) return send(res, 503, page('Checkout setup pending', '<p>The sandbox Stripe API key still needs to be configured.</p><a href="/member">Back to membership</a>'));
+      if (!stripe || !STRIPE_PRICE_ID) return send(res, 503, page('Checkout setup pending', '<p>The Stripe payment configuration is not ready.</p><a href="/member">Back to membership</a>'));
       if (pathname === '/checkout') {
         const parts = [];
         let length = 0;
@@ -436,10 +438,11 @@ const server = createServer(async (req, res) => {
         const form = new URLSearchParams(Buffer.concat(parts).toString());
         const plan = form.get('plan') || 'monthly';
         if (!['monthly', 'annual'].includes(plan)) return send(res, 400, 'Invalid plan');
-        if (plan === 'annual' && !STRIPE_ANNUAL_PRICE_ID) return send(res, 503, page('Annual plan pending', '<p>The annual test price is not connected yet.</p><a href="/member">Back to membership</a>'));
+        if (plan === 'annual' && !STRIPE_ANNUAL_PRICE_ID) return send(res, 503, page('Annual plan pending', '<p>The annual price is not connected yet.</p><a href="/member">Back to membership</a>'));
         return redirect(res, await checkout(member.id, plan));
       }
       if (!member.stripe_customer_id) return redirect(res, '/member');
+      if (!portalConfig) return send(res, 503, page('Membership management unavailable', '<p>The customer portal has not been configured yet.</p>'));
       const portal = await stripe.billingPortal.sessions.create({
         customer: member.stripe_customer_id,
         configuration: portalConfig,
