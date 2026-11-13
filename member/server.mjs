@@ -1,0 +1,293 @@
+import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
+import pg from 'pg';
+import Stripe from 'stripe';
+
+const deriveKey = promisify(scrypt);
+const { DATABASE_URL, STRIPE_API_KEY, STRIPE_PRICE_ID, APP_URL } = process.env;
+const appUrl = new URL(APP_URL);
+if (STRIPE_API_KEY && !/^(rk|sk)_test_/.test(STRIPE_API_KEY)) {
+  throw new Error('The sandbox requires a Stripe test key.');
+}
+const pool = DATABASE_URL ? new pg.Pool({ connectionString: DATABASE_URL }) : null;
+const stripe = STRIPE_API_KEY && new Stripe(STRIPE_API_KEY, { maxNetworkRetries: 2, timeout: 8000 });
+const productionCookies = appUrl.protocol === 'https:' ? '; Secure' : '';
+const cookieName = productionCookies ? '__Host-aom-session' : 'aom-session';
+const sessionSeconds = 7 * 24 * 60 * 60;
+const portalConfig = 'bpc_1UbFAM2MQqTpyHGRzilc2l9Y';
+const files = new Map([
+  ['/', ['index.html', 'text/html; charset=utf-8']],
+  ['/index.html', ['index.html', 'text/html; charset=utf-8']],
+  ['/sample-de.html', ['sample-de.html', 'text/html; charset=utf-8']],
+  ['/sample-en.html', ['sample-en.html', 'text/html; charset=utf-8']],
+  ['/sample-pt.html', ['sample-pt.html', 'text/html; charset=utf-8']],
+  ['/authors-on-a-mission-logo.png', ['authors-on-a-mission-logo.png', 'image/png']],
+]);
+
+if (pool) await pool.query(`
+  CREATE TABLE IF NOT EXISTS members (
+    id uuid PRIMARY KEY,
+    email text UNIQUE NOT NULL,
+    password_hash bytea NOT NULL,
+    salt bytea NOT NULL,
+    stripe_customer_id text UNIQUE,
+    checkout_attempt uuid,
+    checkout_attempt_at timestamptz
+  );
+  CREATE TABLE IF NOT EXISTS member_sessions (
+    token_hash text PRIMARY KEY,
+    member_id uuid NOT NULL REFERENCES members(id),
+    expires_at timestamptz NOT NULL
+  );
+`);
+
+function send(res, status, body, type = 'text/html; charset=utf-8') {
+  res.writeHead(status, { 'Content-Type': type });
+  res.end(body);
+}
+
+function redirect(res, url) {
+  res.writeHead(303, { Location: url });
+  res.end();
+}
+
+function page(title, body) {
+  return `<!doctype html><html lang="en"><meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${title} | Authors on a Mission</title>
+  <style>
+    body{background:#fff3d7;color:#073d2e;font:1rem/1.5 Arial,sans-serif;padding:2rem}
+    main{max-width:34rem;margin:auto;background:white;border-radius:1rem;padding:2rem}
+    label{display:block;margin:1rem 0}input{box-sizing:border-box;width:100%;padding:.7rem;font:inherit}
+    button{background:#073d2e;color:white;font:inherit;border:0;border-radius:.5rem;padding:.7rem 1rem;cursor:pointer}
+    form+form{margin-top:1rem}a{color:inherit}
+  </style><main><a href="/">Authors on a Mission</a><h1>${title}</h1>${body}</main></html>`;
+}
+
+function authForm(join, message = '') {
+  const title = join ? 'Create a test account' : 'Sign in';
+  const other = join ? '<a href="/signin">Sign in</a>' : '<a href="/register">Create a test account</a>';
+  return page(title, `<p>Stripe sandbox. Use test details and a password you do not use elsewhere.</p>
+  ${message && `<p role="alert">${message}</p>`}
+  <form method="post">
+    <label>Email <input name="email" type="email" autocomplete="username" required maxlength="254"></label>
+    <label>Password <input name="password" type="password" required minlength="12" maxlength="128"
+      autocomplete="${join ? 'new-password' : 'current-password'}"></label>
+    <button>${title}</button>
+  </form><p>${other}</p>`);
+}
+
+async function credentials(req) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 8192) return null;
+    chunks.push(chunk);
+  }
+  const data = new URLSearchParams(Buffer.concat(chunks).toString());
+  const email = (data.get('email') ?? '').trim().toLowerCase();
+  const password = data.get('password') ?? '';
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      password.length < 12 || password.length > 128) return null;
+  return { email, password };
+}
+
+const hashToken = (token) => createHash('sha256').update(token).digest('hex');
+function sessionToken(req) {
+  const value = req.headers.cookie?.split('; ').find((item) => item.startsWith(cookieName + '='))?.split('=')[1];
+  return /^[0-9a-f]{64}$/.test(value ?? '') ? value : null;
+}
+
+async function signIn(res, memberId) {
+  const token = randomBytes(32).toString('hex');
+  await pool.query(
+    'INSERT INTO member_sessions VALUES ($1, $2, now() + $3 * interval \'1 second\')',
+    [hashToken(token), memberId, sessionSeconds],
+  );
+  res.setHeader('Set-Cookie', `${cookieName}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${sessionSeconds}${productionCookies}`);
+  redirect(res, '/member');
+}
+
+async function currentMember(req) {
+  const token = sessionToken(req);
+  if (!token) return null;
+  const result = await pool.query(
+    `SELECT members.id, stripe_customer_id FROM member_sessions
+     JOIN members ON members.id = member_id WHERE token_hash = $1 AND expires_at > now()`,
+    [hashToken(token)],
+  );
+  return result.rows[0];
+}
+
+const attempts = new Map();
+function throttle(req) {
+  const ip = req.headers['x-forwarded-for']?.split(',').at(-1)?.trim() ?? req.socket.remoteAddress;
+  const now = Date.now();
+  if (attempts.size >= 2000) {
+    for (const [key, value] of attempts) if (value.until < now) attempts.delete(key);
+    if (attempts.size >= 2000 && !attempts.has(ip)) return true;
+  }
+  let count = attempts.get(ip);
+  if (!count || count.until < now) {
+    count = { until: now + 60000, attempts: 0 };
+    attempts.set(ip, count);
+  }
+  return ++count.attempts > 10;
+}
+
+async function handleAuth(req, res, join) {
+  if (throttle(req)) return send(res, 429, authForm(join, 'Too many attempts. Try again in a minute.'));
+  const input = await credentials(req);
+  if (!input) return send(res, 400, authForm(join, 'Enter an email and a password between 12 and 128 characters.'));
+  const { email, password } = input;
+  if (join) {
+    const salt = randomBytes(16);
+    const hash = await deriveKey(password, salt, 64);
+    const { rows } = await pool.query(
+      'INSERT INTO members (id, email, password_hash, salt) VALUES ($1, $2, $3, $4) ON CONFLICT (email) DO NOTHING RETURNING id',
+      [randomUUID(), email, hash, salt],
+    );
+    if (rows[0]) return signIn(res, rows[0].id);
+    return send(res, 409, authForm(join, 'Could not create this account. Try signing in or use a different test email.'));
+  }
+  const { rows: [member] } = await pool.query('SELECT id, password_hash, salt FROM members WHERE email = $1', [email]);
+  const hash = await deriveKey(password, member?.salt ?? Buffer.alloc(16), 64);
+  if (!member || !timingSafeEqual(hash, member.password_hash)) {
+    return send(res, 401, authForm(false, 'Check your email and password and try again.'));
+  }
+  return signIn(res, member.id);
+}
+
+async function checkout(memberId) {
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    const { rows: [member] } = await db.query('SELECT * FROM members WHERE id = $1 FOR UPDATE', [memberId]);
+    let customer = member.stripe_customer_id;
+    if (!customer) {
+      const created = await stripe.customers.create(
+        { email: member.email, metadata: { member_id: memberId } },
+        { idempotencyKey: `member-customer-${memberId}` },
+      );
+      customer = created.id;
+      await db.query('UPDATE members SET stripe_customer_id = $1 WHERE id = $2', [customer, memberId]);
+    }
+    let subscribed = false;
+    for await (const subscription of stripe.subscriptions.list({ customer, status: 'all', limit: 20 })) {
+      if (['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused'].includes(subscription.status)) {
+        subscribed = true;
+        break;
+      }
+    }
+    if (subscribed) {
+      await db.query('COMMIT');
+      return '/member?status=existing';
+    }
+    const existing = await stripe.checkout.sessions.list({ customer, status: 'open', limit: 10 });
+    const open = existing.data.find((session) => session.client_reference_id === memberId && session.url);
+    if (open) {
+      await db.query('COMMIT');
+      return open.url;
+    }
+    let attempt = member.checkout_attempt;
+    if (!attempt || Date.now() - member.checkout_attempt_at.getTime() > 2 * 60 * 1000) {
+      attempt = randomUUID();
+      await db.query('UPDATE members SET checkout_attempt = $1, checkout_attempt_at = now() WHERE id = $2', [attempt, memberId]);
+    }
+    try {
+      const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        customer,
+        client_reference_id: memberId,
+        subscription_data: { metadata: { member_id: memberId } },
+        line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
+        billing_address_collection: 'required',
+        customer_update: { address: 'auto' },
+        automatic_tax: { enabled: true },
+        integration_identifier: 'authors-on-a-mission-sandbox-ctvrslkp',
+        success_url: new URL('/member?status=submitted', appUrl).href,
+        cancel_url: new URL('/member?status=canceled', appUrl).href,
+      }, { idempotencyKey: `member-checkout-${attempt}` });
+      await db.query('COMMIT');
+      return session.url;
+    } catch (error) {
+      await db.query('COMMIT');
+      throw error;
+    }
+  } catch (error) {
+    await db.query('ROLLBACK');
+    throw error;
+  } finally {
+    db.release();
+  }
+}
+
+const messages = {
+  existing: 'You already have a subscription. Use Manage membership to view it.',
+  submitted: 'You returned from Stripe Checkout. Use Manage membership to check your subscription.',
+  canceled: 'You returned from checkout. You can start it again below.',
+};
+
+const server = createServer(async (req, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const url = new URL(req.url, appUrl);
+    const { pathname } = url;
+    if (req.method === 'POST' && req.headers.origin !== appUrl.origin) return send(res, 403, 'Request rejected.');
+    if (pathname === '/health' && req.method === 'GET') return send(res, 200, 'ok', 'text/plain');
+    if (files.has(pathname) && req.method === 'GET') {
+      const [file, type] = files.get(pathname);
+      let body = await readFile(new URL('../' + file, import.meta.url));
+      if (file === 'index.html') {
+        body = body.toString().replace('https://buy.stripe.com/test_5kQ8wIgah0Vk2dS1ji2ZO00', '/member')
+          .replace('https://billing.stripe.com/p/login/test_5kQ8wIgah0Vk2dS1ji2ZO00', '/member');
+      }
+      return send(res, 200, body, type);
+    }
+    if (!pool) return send(res, 503, page('Member setup pending', '<p>The sandbox database connection still needs to be configured.</p>'));
+    if (pathname === '/register' || pathname === '/signin') {
+      if (req.method === 'GET') return send(res, 200, authForm(pathname === '/register'));
+      if (req.method === 'POST') return await handleAuth(req, res, pathname === '/register');
+    }
+    if (pathname === '/member' && req.method === 'GET') {
+      const member = await currentMember(req);
+      if (!member) return redirect(res, '/signin');
+      const status = url.searchParams.get('status');
+      const notice = Object.hasOwn(messages, status) ? messages[status] : '';
+      return send(res, 200, page('Your test membership', `
+        ${notice && `<p role="status">${notice}</p>`}
+        <form method="post" action="/checkout"><button>Join for €3.99/month (test)</button></form>
+        ${member.stripe_customer_id ? '<form method="post" action="/portal"><button>Manage membership (test)</button></form>' : ''}
+        <form method="post" action="/signout"><button>Sign out</button></form>`));
+    }
+    if (req.method === 'POST' && ['/checkout', '/portal', '/signout'].includes(pathname)) {
+      const member = await currentMember(req);
+      if (!member) return redirect(res, '/signin');
+      if (pathname === '/signout') {
+        await pool.query('DELETE FROM member_sessions WHERE token_hash = $1', [hashToken(sessionToken(req))]);
+        res.setHeader('Set-Cookie', `${cookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${productionCookies}`);
+        return redirect(res, '/');
+      }
+      if (!stripe || !STRIPE_PRICE_ID) return send(res, 503, page('Checkout setup pending', '<p>The sandbox Stripe API key still needs to be configured.</p><a href="/member">Back to membership</a>'));
+      if (pathname === '/checkout') return redirect(res, await checkout(member.id));
+      if (!member.stripe_customer_id) return redirect(res, '/member');
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: member.stripe_customer_id,
+        configuration: portalConfig,
+        return_url: new URL('/member', appUrl).href,
+      });
+      return redirect(res, portal.url);
+    }
+    send(res, 404, 'Page not found.');
+  } catch (error) {
+    console.error('Membership request failed', error.code ?? error.name, error.requestId ?? '');
+    send(res, 500, page('Something went wrong', '<p>Please try again.</p><a href="/member">Back to membership</a>'));
+  }
+});
+
+server.listen(Number(process.env.PORT ?? 3000), '0.0.0.0');

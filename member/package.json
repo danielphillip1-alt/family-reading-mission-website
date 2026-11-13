@@ -1,0 +1,8 @@
+{
+  "name": "authors-on-a-mission-membership",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": { "start": "node server.mjs" },
+  "dependencies": { "pg": "8.23.1", "stripe": "23.1.0" }
+}
