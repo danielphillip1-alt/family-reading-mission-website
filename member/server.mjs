@@ -312,6 +312,36 @@ const server = createServer(async (req, res) => {
         ${notice && `<p role="status">${notice}</p>`}
         <form method="post" action="/checkout"><button>Join for €3.99/month (test)</button></form>
         ${member.stripe_customer_id ? '<form method="post" action="/portal"><button>Manage membership (test)</button></form>' : ''}
+        <section id="aom-books-panel">
+          <h2>Your books</h2>
+          <label for="reading-language">Reading language</label>
+          <select id="reading-language"><option value="en">English</option><option value="de">Deutsch</option><option value="pt-PT">Português</option></select>
+          <button type="button" id="save-language">Save language</button>
+          <p id="book-status" role="status">Checking membership...</p>
+          <ul id="book-list"></ul>
+        </section>
+        <script>
+        (async()=>{
+          const status=document.getElementById('book-status'),list=document.getElementById('book-list'),choice=document.getElementById('reading-language');
+          async function reload(){
+            const resp=await fetch('/api/books',{credentials:'same-origin'});
+            const data=await resp.json();
+            list.textContent='';
+            if(!resp.ok){status.textContent=data.error||'Books unavailable';return;}
+            choice.value=data.language;
+            status.textContent=data.books.length ? 'Choose a book to download:' : 'Your first book is not available yet.';
+            for(const book of data.books){
+              const item=document.createElement('li'),link=document.createElement('a');
+              link.href=book.download;link.textContent=book.slug.replaceAll('-',' ');item.append(link);list.append(item);
+            }
+          }
+          document.getElementById('save-language').addEventListener('click',async()=>{
+            const resp=await fetch('/api/me/language',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:choice.value})});
+            if(resp.ok)await reload();else status.textContent='Language update failed.';
+          });
+          await reload();
+        })();
+        </script>
         <form method="post" action="/signout"><button>Sign out</button></form>`));
     }
     if (req.method === 'POST' && ['/checkout', '/portal', '/signout'].includes(pathname)) {
