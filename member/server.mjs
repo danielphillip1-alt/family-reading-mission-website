@@ -9,6 +9,7 @@ import { handleBooks, processDueDeliveries } from './book-delivery.mjs';
 import {mailConfigured} from './mail.mjs';
 import {importApprovedBookOne} from './import-approved-books.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
+import {testFirstBookDelivery} from './delivery-smoke.mjs';
 
 
 const deriveKey = promisify(scrypt);
@@ -632,5 +633,6 @@ startupMigrations.then(async()=>{
  try{
   const result=await importApprovedBookOne(pool);
   if(result.imported){console.log('Approved customer Book One PDFs imported:',result.editions.join(','));await deliverDueBooks();}
+  await testFirstBookDelivery(pool);
  }catch(e){console.error('Approved customer book import failed:',e?.message||e?.code);}
 });
