@@ -90,6 +90,12 @@ if (pool) await pool.query(`
     UNIQUE (release_id,member_id,kind)
   );
   CREATE INDEX IF NOT EXISTS aom_delivery_pending_idx ON aom_delivery_outbox(state,next_attempt_at);
+  CREATE TABLE IF NOT EXISTS aom_launch_interest (
+    email text PRIMARY KEY,
+    language text NOT NULL DEFAULT 'en',
+    consented_at timestamptz NOT NULL DEFAULT now(),
+    source text NOT NULL DEFAULT 'website'
+  );
   CREATE TABLE IF NOT EXISTS member_sessions (
     token_hash text PRIMARY KEY,
     member_id uuid NOT NULL REFERENCES members(id),
@@ -329,6 +335,31 @@ const server = createServer(async (req, res) => {
           .replace('https://billing.stripe.com/p/login/test_5kQ8wIgah0Vk2dS1ji2ZO00', '/member');
       }
       return send(res, 200, body, type);
+    }
+    if (pathname === '/early-access') {
+      if (req.method === 'GET') return send(res, 200, page('Get the membership launch link', `
+        <p>Authors On A Mission is preparing secure memberships and the first downloadable story. Leave your email and we will contact you when purchasing is available.</p>
+        <p><strong>Monthly €3.99 • Yearly €39.90</strong> (two months free). No payment is taken here.</p>
+        <form method="post" action="/early-access">
+          <label>Your email <input name="email" type="email" autocomplete="email" required maxlength="254"></label>
+          <label>Preferred language <select name="language"><option value="en">English</option><option value="de">Deutsch</option><option value="pt-PT">Português</option></select></label>
+          <label><input name="consent" type="checkbox" value="yes" required style="width:auto"> I agree to receive an email about this membership opening. I can request removal at any time.</label>
+          <button>Notify me when memberships open</button>
+        </form><p><a href="/">Return to the website</a></p>`));
+      if (req.method === 'POST') {
+        if (!pool) return send(res,503,'Database unavailable');
+        if (throttle(req)) return send(res,429,page('Please try again shortly','<p>Too many requests.</p>'));
+        const chunks=[];let size=0;
+        for await(const chunk of req) {size+=chunk.length;if(size>2048)return send(res,413,'Request too large');chunks.push(chunk);}
+        const values=new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
+        const email=(values.get('email')||'').trim().toLowerCase(),language=values.get('language');
+        if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length>254 ||
+           !['en','de','pt-PT'].includes(language) || values.get('consent')!=='yes')
+          return send(res,400,page('Check your details','<p>Please provide a valid email, language and consent.</p><p><a href="/early-access">Try again</a></p>'));
+        await pool.query(`INSERT INTO aom_launch_interest(email,language) VALUES($1,$2)
+           ON CONFLICT(email) DO UPDATE SET language=excluded.language`,[email,language]);
+        return send(res,200,page('Thank you','<p>You are on the launch-notification list. You have not been charged. We will email you when the books and checkout are ready.</p><p><a href="/">Return to the website</a></p>'));
+      }
     }
     if (!pool) return send(res, 503, page('Member setup pending', '<p>The membership database connection is temporarily unavailable.</p>'));
     if (pathname.startsWith('/api/') && await handleBooks(req,res,url,currentMember,pool)) return;
