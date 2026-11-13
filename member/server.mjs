@@ -9,7 +9,7 @@ import { handleBooks, processDueDeliveries } from './book-delivery.mjs';
 import {mailConfigured} from './mail.mjs';
 import {importApprovedBookOne} from './import-approved-books.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
-import {testFirstBookDelivery} from './delivery-smoke.mjs';
+import {testFirstBookDelivery,testTranslatedBooksDelivery} from './delivery-smoke.mjs';
 
 
 // Render environment variable names are case-sensitive; accept the user's existing key.
@@ -637,5 +637,6 @@ startupMigrations.then(async()=>{
   const result=await importApprovedBookOne(pool);
   if(result.imported){console.log('Approved customer Book One PDFs imported:',result.editions.join(','));await deliverDueBooks();}
   await testFirstBookDelivery(pool);
+  await testTranslatedBooksDelivery(pool);
  }catch(e){console.error('Approved customer book import failed:',e?.message||e?.code);}
 });
