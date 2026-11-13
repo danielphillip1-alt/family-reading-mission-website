@@ -1,0 +1,26 @@
+name: Wake automatic membership book delivery
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deliver-book-emails:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wake the production delivery worker
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if curl --silent --show-error --max-time 25 --fail \
+              https://authors-on-a-mission-members.onrender.com/health \
+              -o /dev/null; then
+              echo "Membership service is responsive; queued book delivery will run automatically."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Membership delivery service did not respond"
+          exit 1
