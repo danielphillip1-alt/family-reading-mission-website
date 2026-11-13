@@ -203,7 +203,7 @@ async function publishedBookReady() {
 async function billingReady() {
   return Boolean(pool && stripe && STRIPE_PRICE_ID && STRIPE_ANNUAL_PRICE_ID &&
     process.env.STRIPE_WEBHOOK_SECRET && process.env.STRIPE_PORTAL_CONFIGURATION_ID &&
-    process.env.AOM_RESEND_API_KEY && process.env.AOM_FROM_EMAIL) && await publishedBookReady();
+    mailConfigured()) && await publishedBookReady();
 }
 function send(res, status, body, type = 'text/html; charset=utf-8') {
   res.writeHead(status, { 'Content-Type': type });
