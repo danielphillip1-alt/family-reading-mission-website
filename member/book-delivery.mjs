@@ -121,7 +121,8 @@ export async function processDueDeliveries(pool) {
         await pool.query("UPDATE aom_direct_delivery_outbox SET state='cancelled' WHERE id=$1",[task.id]);continue;
       }
       const book=q.rows[0],copy=COPY[book.language];
-      const html='<p>'+escapeHTML(copy.subject)+'</p><p>Your subscribed book is attached to this email as a PDF. Keep this email to access it later.</p>';
+      const body={en:'Your membership book is attached as a PDF. Keep this email to read it again.',de:'Ihr Buch ist dieser E-Mail als PDF angehängt. Bewahren Sie die E-Mail zum späteren Lesen auf.','pt-PT':'O seu livro está anexado a esta mensagem em PDF. Guarde este email para o poder ler novamente.'}[book.language];
+      const html='<p>'+escapeHTML(copy.subject)+'</p><p>'+escapeHTML(body)+'</p>';
       const attachment={filename:book.slug+'-'+book.language+'.pdf',content:book.pdf_content.toString('base64')};
       const response=await sendResend({email:book.email,subject:copy.subject,html,attachments:[attachment]},task.id);
       await pool.query("UPDATE aom_direct_delivery_outbox SET state='sent',provider_message_id=$1 WHERE id=$2",[response.id||null,task.id]);
