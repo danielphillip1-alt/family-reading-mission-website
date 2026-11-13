@@ -177,6 +177,11 @@ export async function handleBooks(req,res,url,currentMember,pool){
       'Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff'});
     res.end(stored.rows[0].pdf_content);return true;
   }
+  if(path==='/api/admin/payment-link-subscribers' && req.method==='GET'){
+    if(!authorized(req)){reply(res,403,{error:'Unauthorized'});return true;}
+    const q=await pool.query("SELECT email,language,status,current_period_end,stripe_subscription_id FROM aom_direct_subscriptions ORDER BY updated_at DESC LIMIT 50000");
+    reply(res,200,{count:q.rowCount,subscribers:q.rows});return true;
+  }
   if(path==='/api/admin/launch-interest' && req.method==='GET'){
     if(!authorized(req)){reply(res,403,{error:'Unauthorized'});return true;}
     const q=await pool.query('SELECT email,language,consented_at,source FROM aom_launch_interest ORDER BY consented_at ASC LIMIT 50000');
