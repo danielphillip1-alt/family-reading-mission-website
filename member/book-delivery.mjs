@@ -32,7 +32,7 @@ async function sendResend(message,idempotencyKey){
   if(!key||!from)throw Error('Email not configured');
   const response=await fetch('https://api.resend.com/emails',{
     method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json','Idempotency-Key':idempotencyKey},
-    body:JSON.stringify({from,to:[message.email],subject:message.subject,html:message.html})
+    body:JSON.stringify({from,to:[message.email],subject:message.subject,html:message.html,attachments:message.attachments})
   });
   if(!response.ok)throw Error('Mail provider returned '+response.status);
   return await response.json();
@@ -67,13 +67,17 @@ export async function processDueDeliveries(pool) {
       if(!await entitled(pool,task.member_id)){await pool.query('UPDATE aom_delivery_outbox SET state=$1 WHERE id=$2',['cancelled',task.id]);continue;}
       const m=await pool.query('SELECT email,preferred_language FROM members WHERE id=$1',[task.member_id]);
       if(!m.rowCount||m.rows[0].preferred_language!==task.language){await pool.query("UPDATE aom_delivery_outbox SET state='cancelled' WHERE id=$1",[task.id]);continue;}
-      const l=await pool.query(`SELECT 1 FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id
+      const l=await pool.query(`SELECT r.slug,b.pdf_content FROM aom_releases r
+        JOIN aom_release_editions e ON e.release_id=r.id
+        JOIN aom_book_files b ON b.storage_key=e.private_object_key AND b.sha256=e.sha256
         WHERE r.id=$1 AND r.status='published' AND e.language=$2 AND e.approved_at IS NOT NULL`,[task.release_id,task.language]);
       if(!l.rowCount){throw Error('Edition unavailable');}
       const copy=COPY[task.language];
-      const link=(process.env.AOM_PUBLIC_MEMBER_URL||'https://www.theauthorsmission.de')+'/member';
+      const link=new URL('/member', process.env.AOM_PUBLIC_MEMBER_URL || process.env.APP_URL || 'https://authors-on-a-mission-members.onrender.com').href;
       const html='<p>'+escapeHTML(copy.greeting)+'</p><p><a href="'+escapeHTML(link)+'">'+escapeHTML(link)+'</a></p>';
-      const response=await sendResend({email:m.rows[0].email,subject:copy.subject,html},task.id);
+      const edition=l.rows[0];
+      const attachment={filename:edition.slug+'-'+task.language+'.pdf',content:edition.pdf_content.toString('base64')};
+      const response=await sendResend({email:m.rows[0].email,subject:copy.subject,html,attachments:[attachment]},task.id);
       await pool.query(`UPDATE aom_delivery_outbox SET state='sent',provider_message_id=$1 WHERE id=$2`,[response.id||null,task.id]);sent++;
     }catch(e){
       await pool.query(`UPDATE aom_delivery_outbox SET state=CASE WHEN attempts>=5 THEN 'failed' ELSE 'retry' END,
