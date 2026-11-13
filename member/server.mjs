@@ -447,7 +447,7 @@ const server = createServer(async (req, res) => {
     if (pathname === '/early-access') {
       if (req.method === 'GET') return send(res, 200, page('Get the membership launch link', `
         <p>Authors On A Mission is preparing secure memberships and the first downloadable story. Leave your email and we will contact you when purchasing is available.</p>
-        <p><strong>Monthly €3.99 • Yearly €39.90</strong> (two months free). No payment is taken here.</p>
+        <p><strong>Monthly €3.99 • Yearly €39.99</strong> (two months free). No payment is taken here.</p>
         <form method="post" action="/early-access">
           <label>Your email <input name="email" type="email" autocomplete="email" required maxlength="254"></label>
           <label>Preferred language <select name="language"><option value="en">English</option><option value="de">Deutsch</option><option value="pt-PT">Português</option></select></label>
@@ -500,7 +500,7 @@ const server = createServer(async (req, res) => {
         </form>
         <form class="plan-checkout" method="post" action="/checkout">
           <input type="hidden" name="plan" value="annual">
-          <button>€39.90 per year — 2 months free; renews annually</button>
+          <button>€39.99 per year — 2 months free; renews annually</button>
         </form>
         <p>Annual membership saves €7.98 (16.7%) compared with 12 monthly payments. Taxes are included where applicable.</p>
         <dialog id="aom-plan-dialog" aria-labelledby="plan-dialog-heading" style="max-width:28rem;border:1px solid #073d2e;border-radius:1rem;padding:1.5rem">
@@ -519,7 +519,7 @@ const server = createServer(async (req, res) => {
               const annual=f.querySelector('[name=plan]').value==='annual';
               document.getElementById('plan-dialog-text').textContent=
                 String(document.getElementById('reading-year').dataset.released) + ' approved book(s) have been released in the current November-to-October reading cycle. You can access previously published books immediately, with new releases arriving during your active membership. '+
-                (annual?'€39.90 will be charged now and automatically every 12 months unless you cancel.':'€3.99 will be charged now and automatically every month unless you cancel.');
+                (annual?'€39.99 will be charged now and automatically every 12 months unless you cancel.':'€3.99 will be charged now and automatically every month unless you cancel.');
               d.showModal();
             }));
             document.getElementById('close-plan').onclick=()=>d.close();
