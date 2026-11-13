@@ -48,7 +48,7 @@ export async function handleStripeWebhook({req,res,stripe,pool,secret}) {
           const customer=await stripe.customers.retrieve(customerId);
           email=customer?.email;
         }
-        if(email && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){
+        if(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
           await client.query(`INSERT INTO aom_direct_subscriptions
             (stripe_subscription_id,stripe_customer_id,email,language,status,current_period_end)
             VALUES($1,$2,$3,$4,$5,$6)
