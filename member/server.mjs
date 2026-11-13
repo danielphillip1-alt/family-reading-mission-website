@@ -299,6 +299,24 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === 'POST' && !pathname.startsWith('/api/admin/') && req.headers.origin !== appUrl.origin) return send(res, 403, 'Request rejected.');
     if (pathname === '/health' && req.method === 'GET') return send(res, 200, 'ok', 'text/plain');
+    if (pathname === '/ready' && req.method === 'GET') {
+      const configured = Boolean(pool && stripe && STRIPE_PRICE_ID && STRIPE_ANNUAL_PRICE_ID &&
+        process.env.STRIPE_WEBHOOK_SECRET && process.env.AOM_ADMIN_API_TOKEN);
+      let database = false;
+      if (pool) {
+        try { await pool.query('SELECT 1'); database = true; } catch { database = false; }
+      }
+      const ready = configured && database;
+      return send(res, ready ? 200 : 503, JSON.stringify({
+        ready,
+        database,
+        monthly_price: Boolean(STRIPE_PRICE_ID),
+        annual_price: Boolean(STRIPE_ANNUAL_PRICE_ID),
+        stripe_configured: Boolean(stripe),
+        webhook_configured: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
+        admin_configured: Boolean(process.env.AOM_ADMIN_API_TOKEN)
+      }), 'application/json; charset=utf-8');
+    }
     if (files.has(pathname) && req.method === 'GET') {
       const [file, type] = files.get(pathname);
       let body = await readFile(new URL('../' + file, import.meta.url));
