@@ -36,3 +36,15 @@ CREATE TABLE IF NOT EXISTS aom_stripe_webhook_events (
   event_type text NOT NULL,
   processed_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Apply only to the isolated test database after review.
+CREATE TABLE IF NOT EXISTS aom_subscription_states (
+ stripe_subscription_id text PRIMARY KEY,
+ member_id uuid NOT NULL REFERENCES members(id),
+ stripe_customer_id text NOT NULL,
+ status text NOT NULL,
+ current_period_end timestamptz,
+ cancel_at_period_end boolean NOT NULL DEFAULT false,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS aom_subscriptions_member_idx ON aom_subscription_states(member_id,status,current_period_end);
