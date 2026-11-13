@@ -26,13 +26,20 @@
 - member/import-approved-books.mjs checks existing approved DB hashes first, to avoid depending on expiring temporary transfer URLs on subsequent redeploys.
 - User intent: submit ONE new approved book/month, never mix unreleased files with published inventory.
 
-## Automatic recurring EMAIL fulfillment — NOT CONFIGURED
-- IMPORTANT: Production /ready gives email_configured=false and ready=false. The Resend HTTP API integration exists in member/mail.mjs, with automatic once-per-release email outbox, retry and PDF attachment logic in member/book-delivery.mjs. Stripe payment link webhook records paid subscribers, renewal state and selected language in aom_direct_subscriptions. Worker runs every 60s while service is awake.
-- Missing: verified transactional email sender and HTTPS API token (AOM_RESEND_API_KEY and AOM_FROM_EMAIL).
-- Official Render docs: Free web service **BLOCKS all SMTP outbound ports 25,465,587** (https://render.com/docs/free), so Gmail app password and smtp.gmail.com fallback **WILL NOT WORK ON THIS SERVICE PLAN**. Do not send user to generate app password. Existing ChatGPT Gmail connector can send manual messages but cannot be silently transferred into backend API credentials.
-- Correct production path: set up a transactional HTTPS API such as Resend at https://resend.com, verify domain/subdomain with DNS at domain host, create a send-scoped API key, add AOM_RESEND_API_KEY and AOM_FROM_EMAIL securely to the Render service (never in chat or GitHub); redeploy, run a REAL email-to-owner test and then check delivery outbox/logs. Resend free cap currently 100 per day/3,000 monthly; user may need a higher tier if volume exceeds cap.
-- Do not mark email delivery ready or promise instant EMAIL until an actual outgoing paid-user-style email with full PDF succeeds.
-- Immediate post-payment book **DOWNLOAD** does not depend on email, and the Stripe Payment Links redirect is already configured. This is the working fallback while email service is being connected.
+## Automatic recurring EMAIL fulfillment — CONFIGURED AND REAL PDF SENDS VERIFIED
+- Resend sending domain mail.theauthorsmission.de verified by user. From: Authors On A Mission <books@mail.theauthorsmission.de>.
+- User saved Resend key as **AOM_Resend_API_KEY** (mixed case); production server safely aliases it to AOM_RESEND_API_KEY without displaying any secret. Never ask user to paste key again.
+- Production Render /ready checked true for ready, database, email_configured, approved_book_inventory, stripe_configured, stripe_checkout_read_verified, stripe_subscription_read_verified.
+- Production Resend successfully sent COMPLETE Book One PDFs via server-side code and all three messages **arrived in the connected business Gmail inbox**, with exact attachment bytes confirmed:
+  - English 7,462,409 bytes: Zachary_My_Unique_Book_One_EN.pdf
+  - German 9,930,177 bytes: Zachary_My_Unique_Book_One_DE.pdf
+  - Portuguese 7,465,891 bytes: Zachary_My_Unique_Book_One_PT.pdf
+- Real paid Checkout Session → Stripe webhook → database → email **has NOT been exercised with a real completed payment**: the live Stripe account had zero completed checkout sessions as of the last check. Never present a simulated test as a real paid-purchase end-to-end verification.
+- The Stripe webhook listens to checkout.session.completed and subscription events, stores direct subscriber email and selected language in aom_direct_subscriptions, and the member/book-delivery.mjs worker emails each newly published, language-matched full PDF to active subscribers. Outbox deduplicates (subscription ID, release ID), retries transient failures and prevents sending to nonactive subscriptions.
+- The Render service is on FREE compute and sleeps when idle; an hourly GitHub Actions scheduled workflow exists on the **main/default branch**, .github/workflows/wake-book-delivery.yml, to wake the service, allowing queued emails to process. This is best-effort, not a delivery-time SLA.
+- The website's two payment links redirect verified buyers to a private /purchase-success book library with immediate downloads; email sends separately, normally shortly after webhook processing.
+- User only needs to upload one new approved book per month, verify all 3 languages, and have the assistant approve/import/release it; do not guess or substitute nonapproved files.
+- Do not add new payment credentials or require the user to recreate Resend setup.
 
 ## Test evidence
 - Production deploy on 2026-11-13 returned LIVE and /health returned ok.
