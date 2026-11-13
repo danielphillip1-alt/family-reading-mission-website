@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import pg from 'pg';
 import Stripe from 'stripe';
+import { handleStripeWebhook } from './stripe-webhook.mjs';
 
 const deriveKey = promisify(scrypt);
 const { DATABASE_URL, STRIPE_API_KEY, STRIPE_PRICE_ID, APP_URL } = process.env;
@@ -35,6 +36,20 @@ if (pool) await pool.query(`
     stripe_customer_id text UNIQUE,
     checkout_attempt uuid,
     checkout_attempt_at timestamptz
+  );
+  CREATE TABLE IF NOT EXISTS aom_stripe_webhook_events (
+    stripe_event_id text PRIMARY KEY,
+    event_type text NOT NULL,
+    processed_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE TABLE IF NOT EXISTS aom_subscription_states (
+    stripe_subscription_id text PRIMARY KEY,
+    member_id uuid NOT NULL REFERENCES members(id),
+    stripe_customer_id text NOT NULL,
+    status text NOT NULL,
+    current_period_end timestamptz,
+    cancel_at_period_end boolean NOT NULL DEFAULT false,
+    updated_at timestamptz NOT NULL DEFAULT now()
   );
   CREATE TABLE IF NOT EXISTS member_sessions (
     token_hash text PRIMARY KEY,
@@ -238,6 +253,9 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, appUrl);
     const { pathname } = url;
+    if (pathname === '/stripe/webhook' && req.method === 'POST') {
+      return handleStripeWebhook({req,res,stripe,pool,secret:process.env.STRIPE_WEBHOOK_SECRET});
+    }
     if (req.method === 'POST' && req.headers.origin !== appUrl.origin) return send(res, 403, 'Request rejected.');
     if (pathname === '/health' && req.method === 'GET') return send(res, 200, 'ok', 'text/plain');
     if (files.has(pathname) && req.method === 'GET') {
