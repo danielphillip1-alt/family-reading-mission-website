@@ -1,0 +1,21 @@
+name: Membership delivery rule tests
+on:
+  push:
+    branches:
+      - feature/automated-book-delivery
+    paths:
+      - 'membership-automation/**'
+      - '.github/workflows/membership-delivery-tests.yml'
+  pull_request:
+    paths:
+      - 'membership-automation/**'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run delivery rules tests
+        run: cd membership-automation && python -m unittest -v test_delivery_rules.py
