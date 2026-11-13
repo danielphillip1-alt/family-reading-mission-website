@@ -5,7 +5,19 @@ const APPROVED={
  de:{env:'AOM_BOOK_01_DE_SOURCE_URL',sha:'c1bcc9a4ca0289e86aa81a64e38f4150568fc6f68098e91abb96b745bbf03d9e'}
 };
 export async function importApprovedBookOne(pool){
- if(!pool || !Object.values(APPROVED).every(x=>process.env[x.env]))return {skipped:true};
+ if(!pool) return {skipped:true};
+ // Once all three exact approved editions are in private Postgres storage, don't
+ // re-fetch expiring temporary transfer URLs on every redeploy.
+ const existing=await pool.query(`SELECT e.language, e.sha256
+    FROM aom_releases r
+    JOIN aom_release_editions e ON e.release_id=r.id AND e.approved_at IS NOT NULL
+    JOIN aom_book_files b ON b.storage_key=e.private_object_key AND b.sha256=e.sha256
+    WHERE r.slug=$1 AND r.status='published'`,['zachary-my-unique-hat-2026-11']);
+ if(Object.entries(APPROVED).every(([lang,edition]) =>
+    existing.rows.some(row => row.language===lang && row.sha256===edition.sha)))
+   return {imported:false,alreadyPresent:true,editions:Object.keys(APPROVED)};
+ if(!Object.values(APPROVED).every(x=>process.env[x.env]))return {skipped:true};
+
  const staged=[];
  for(const [language,item] of Object.entries(APPROVED)){
   const source=process.env[item.env];
