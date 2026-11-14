@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {handleBarber} from './barber-gifts.mjs';
 
 process.env.AOM_BARBER_GIFT_SECRET='test-secret-not-for-production';
+process.env.APP_URL='https://example.test';
 const sid='cs_live_'+('B'.repeat(40));
 const session={id:sid,livemode:true,mode:'payment',status:'complete',
  payment_status:'paid',payment_link:'plink_1UboGGRuZKBP2B3nzmcAPiQL',
