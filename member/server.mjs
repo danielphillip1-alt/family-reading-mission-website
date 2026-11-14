@@ -189,11 +189,21 @@ const startupMigrations = pool ? pool.query(`
     buyer_email text NOT NULL,
     buyer_language text NOT NULL CHECK(buyer_language IN ('en','de','pt-PT')),
     gift_hash text NOT NULL UNIQUE,
+    gift2_hash text UNIQUE,
     claimed_at timestamptz,
+    claimed2_at timestamptz,
     recipient_email text,
+    recipient2_email text,
     recipient_language text CHECK(recipient_language IN ('en','de','pt-PT')),
-    access_hash text UNIQUE
+    recipient2_language text CHECK(recipient2_language IN ('en','de','pt-PT')),
+    access_hash text UNIQUE,
+    access2_hash text UNIQUE
   );
+  ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS gift2_hash text UNIQUE;
+  ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS claimed2_at timestamptz;
+  ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS recipient2_email text;
+  ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS recipient2_language text;
+  ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS access2_hash text UNIQUE;
   CREATE TABLE IF NOT EXISTS aom_legal_requests (
     id uuid PRIMARY KEY,
     kind text NOT NULL CHECK(kind IN ('cancel','withdraw')),
@@ -361,7 +371,7 @@ async function handleAuth(req, res, join) {
 
 async function checkout(memberId, billingPlan) {
   if (!['monthly', 'annual'].includes(billingPlan)) throw new Error('Invalid membership plan');
-  if (billingPlan === 'annual') return 'https://buy.stripe.com/8x2fZjgJ6equdzGfcdffy02';
+  if (billingPlan === 'annual') return 'https://buy.stripe.com/14AdRbcsQ96aeDKe89ffy03';
   const selectedPrice = billingPlan === 'annual' ? STRIPE_ANNUAL_PRICE_ID : STRIPE_PRICE_ID;
   if (!selectedPrice) throw new Error('This membership plan has not been configured yet');
   const db = await pool.connect();
@@ -489,7 +499,7 @@ const server = createServer(async (req, res) => {
     if (pathname === '/early-access') {
       if (req.method === 'GET') return send(res, 200, page('Get the membership launch link', `
         <p>Authors On A Mission is preparing secure memberships and the first downloadable story. Leave your email and we will contact you when purchasing is available.</p>
-        <p><strong>Monthly €3.99 • Yearly €39.99</strong> (two months free). No payment is taken here.</p>
+        <p><strong>Digital book bundle €24.99, one-time.</strong> Includes your personal download and up to two gift links. No payment is taken here.</p>
         <form method="post" action="/early-access">
           <label>Your email <input name="email" type="email" autocomplete="email" required maxlength="254"></label>
           <label>Preferred language <select name="language"><option value="en">English</option><option value="de">Deutsch</option><option value="pt-PT">Português</option></select></label>
@@ -538,38 +548,9 @@ const server = createServer(async (req, res) => {
         <section aria-labelledby="reading-year"><h2 id="reading-year" data-released="${readyCount}">Your reading year: November ${cycleLabel} – October ${cycleLabel+1}</h2>
         <p><strong>${readyCount} approved ${readyCount===1?'book has':'books have'} been released</strong> so far in this reading cycle. All released books available in your selected language are unlocked with an active membership. New books and their accompanying reading activities become available as they are published. The November reading cycle is separate from your payment date: the annual package gives 12 months of access from the date of purchase, with no automatic renewal.</p>
         <p>Example: If you join in March after four monthly books have been published (November through February), all four are available immediately. You then receive new publications as they are released while your subscription is active.</p></section>
-        <form class="plan-checkout" method="post" action="/checkout">
-          <input type="hidden" name="plan" value="monthly">
-          <button>€3.99 per month — renews monthly</button>
-        </form>
-        <form class="plan-checkout" method="post" action="/checkout">
-          <input type="hidden" name="plan" value="annual">
-          <button>€39.99 one-time payment — 12 months of access; no renewal</button>
-        </form>
-        <p>One-time annual package saves €7.89 (16.5%) compared with 12 monthly payments. Taxes are included where applicable.</p>
-        <dialog id="aom-plan-dialog" aria-labelledby="plan-dialog-heading" style="max-width:28rem;border:1px solid #073d2e;border-radius:1rem;padding:1.5rem">
-          <h2 id="plan-dialog-heading">Before you subscribe</h2>
-          <p id="plan-dialog-text"></p>
-          <p>The monthly option renews until canceled. The annual package has no automatic renewal; access ends after 12 months unless you purchase another package.</p>
-          <button type="button" id="confirm-plan">Continue to secure payment</button>
-          <button type="button" id="close-plan" style="background:#eee;color:#073d2e">Go back</button>
-        </dialog>
-        <script>
-          (() => {
-            const d=document.getElementById('aom-plan-dialog');
-            let pending=null;
-            document.querySelectorAll('.plan-checkout').forEach(f=>f.addEventListener('submit',e=>{
-              e.preventDefault();pending=f;
-              const annual=f.querySelector('[name=plan]').value==='annual';
-              document.getElementById('plan-dialog-text').textContent=
-                String(document.getElementById('reading-year').dataset.released) + ' approved book(s) have been released in the current November-to-October reading cycle. You can access previously published books immediately, with new releases arriving during your active membership. '+
-                (annual?'€39.99 will be charged once for 12 months of access. There is no automatic annual renewal.':'€3.99 will be charged now and automatically every month unless you cancel.');
-              d.showModal();
-            }));
-            document.getElementById('close-plan').onclick=()=>d.close();
-            document.getElementById('confirm-plan').onclick=()=>{if(pending)pending.submit();};
-          })();
-        </script>
+        <p><strong>€24.99 once — one book bundle for you and up to two gift links to share.</strong> No automatic renewal.</p>
+        <a class="btn" href="https://buy.stripe.com/14AdRbcsQ96aeDKe89ffy03">Purchase digital book bundle</a>
+
         ${member.stripe_customer_id ? '<form method="post" action="/portal"><button>Manage membership</button></form>' : ''}
         <section id="aom-books-panel">
           <h2>Your books</h2>
