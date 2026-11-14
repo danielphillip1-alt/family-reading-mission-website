@@ -38,7 +38,16 @@ export async function handleStripeWebhook({req,res,stripe,pool,secret}) {
       :(typeof data.subscription==='string'?data.subscription:null);
     if(customerId && subscriptionId) {
       // Retrieve authoritative Stripe subscription so out-of-order events cannot roll status backwards.
-      const subscription=await stripe.subscriptions.retrieve(subscriptionId);
+      let subscription=await stripe.subscriptions.retrieve(subscriptionId);
+      // Annual checkout is a prepaid twelve-month term: schedule termination at its
+      // first period end so Stripe cannot charge the customer for a second year.
+      const paymentLinkId=typeof data.payment_link==='string'?data.payment_link:data.payment_link?.id;
+      const isAnnualCheckout=event.type==='checkout.session.completed' && data.mode==='subscription' &&
+        (data.metadata?.billing_plan==='annual' || paymentLinkId==='plink_1UbOT5RuZKBP2B3nKgZfg1ie');
+      if(isAnnualCheckout && !subscription.cancel_at_period_end) {
+        subscription=await stripe.subscriptions.update(subscriptionId,{cancel_at_period_end:true,proration_behavior:'none'});
+        if(!subscription.cancel_at_period_end) throw new Error('Annual prepaid term was not scheduled to end');
+      }
       const period=subscription.items?.data?.[0]?.current_period_end ?? subscription.current_period_end;
       const directLinks=new Set(['plink_1UbGQ6RuZKBP2B3nVEKI0Y7h','plink_1UbOT5RuZKBP2B3nKgZfg1ie']);
       if(event.type==='checkout.session.completed' && directLinks.has(typeof data.payment_link==='string' ? data.payment_link : data.payment_link?.id)){
