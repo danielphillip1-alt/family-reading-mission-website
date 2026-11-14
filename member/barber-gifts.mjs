@@ -5,7 +5,7 @@ const langs=new Set(['en','de','pt-PT']);
 const hash=x=>createHash('sha256').update(x).digest('hex');
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const language=s=>s.custom_fields?.find(f=>f.key==='booklanguage')?.dropdown?.value==='de'?'de':s.custom_fields?.find(f=>f.key==='booklanguage')?.dropdown?.value==='pt'?'pt-PT':'en';
-const code=id=>createHmac('sha256',process.env.AOM_BARBER_GIFT_SECRET||process.env.STRIPE_WEBHOOK_SECRET).update('gift:'+id).digest('hex');
+const code=(id,slot=1)=>createHmac('sha256',process.env.AOM_BARBER_GIFT_SECRET||process.env.STRIPE_WEBHOOK_SECRET).update(slot===1?'gift:'+id:'gift2:'+id).digest('hex');
 function send(res,status,body,type='text/html; charset=utf-8'){res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex,nofollow','X-Content-Type-Options':'nosniff'});res.end(body);}
 function page(title,body){return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>'+safe(title)+'</title><style>body{background:#073d2e;color:#143d30;font:17px/1.5 system-ui;padding:20px}main{max-width:650px;margin:30px auto;padding:28px;background:#fff8e8;border-radius:18px}a{color:#006445;overflow-wrap:anywhere}.btn,button{display:inline-block;padding:12px 18px;margin:10px 0;background:#096043;color:white;border:0;border-radius:9px;text-decoration:none;cursor:pointer}input,select{display:block;padding:10px;width:95%;margin:5px 0 15px}</style><main><h1>'+safe(title)+'</h1>'+body+'</main></html>';}
 async function verified(stripe,id){if(!/^cs_live_[a-zA-Z0-9]{16,200}$/.test(id||''))return null;let s;try{s=await stripe.checkout.sessions.retrieve(id);}catch(e){if(e?.type==='StripeInvalidRequestError'&&[400,404].includes(e?.statusCode))return null;throw e;}return s.livemode&&s.mode==='payment'&&s.status==='complete'&&s.payment_status==='paid'&&s.payment_link===LINK&&s.currency==='eur'&&s.amount_total===2499?s:null;}
@@ -19,33 +19,43 @@ try{
 const path=url.pathname,id=url.searchParams.get('session_id'),gift=url.searchParams.get('gift'),access=url.searchParams.get('access'),slug=url.searchParams.get('slug');
 if(path==='/barber/thanks'&&req.method==='GET'){
 const s=await verified(stripe,id);if(!s){send(res,403,page('Payment not verified','Please complete checkout first.'));return true;}
-const at=new Date(s.created*1000),lang=language(s),g=code(id),email=(s.customer_details?.email||s.customer_email||'').toLowerCase();
-await pool.query('INSERT INTO aom_barber_gifts(session_id,purchased_at,buyer_email,buyer_language,gift_hash) VALUES($1,$2,$3,$4,$5) ON CONFLICT(session_id) DO NOTHING',[id,at,email,lang,hash(g)]);
+const at=new Date(s.created*1000),lang=language(s),g=code(id),g2=code(id,2),email=(s.customer_details?.email||s.customer_email||'').toLowerCase();
+await pool.query('INSERT INTO aom_barber_gifts(session_id,purchased_at,buyer_email,buyer_language,gift_hash,gift2_hash) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(session_id) DO UPDATE SET gift2_hash=COALESCE(aom_barber_gifts.gift2_hash,EXCLUDED.gift2_hash)',[id,at,email,lang,hash(g),hash(g2)]);
 const giftUrl=new URL('/barber/redeem?gift='+g,process.env.APP_URL).href;
-try{if(email&&mailConfigured())await sendTransactionalMail({email,subject:'Your Barber Supporter Bundle and gift link',html:'<p>Thank you for supporting Authors On A Mission.</p><p>Your personal books: <a href="'+safe(new URL('/barber/thanks?session_id='+id,process.env.APP_URL).href)+'">Open your purchased book collection</a></p><p>Your one-use gift link: <a href="'+safe(giftUrl)+'">Share this gift link with one person</a></p><p>Keep your personal receipt link private. This is a one-time purchase, not a subscription.</p>'},'barber-buyer-'+id);}catch(e){console.error('Barber buyer email failed',e?.code||e?.name);}
-send(res,200,page('Thank you, Barber Supporter!','<p>Your one-time €24.99 purchase is verified. Your personal downloads:</p>'+list(await titles(pool,at,lang),'/barber/pdf?session_id='+encodeURIComponent(id)+'&slug=')+'<h2>One gift link to share</h2><p><a href="'+safe(giftUrl)+'">'+safe(giftUrl)+'</a></p><p>Send it privately to one person. Only the first recipient can redeem it. Do not share your purchase receipt link.</p>'));return true;
+const giftUrl2=new URL('/barber/redeem?gift='+g2,process.env.APP_URL).href;
+try{if(email&&mailConfigured())await sendTransactionalMail({email,subject:'Your digital book bundle and two gift links',html:'<p>Thank you for supporting Authors On A Mission.</p><p>Your personal books: <a href="'+safe(new URL('/barber/thanks?session_id='+id,process.env.APP_URL).href)+'">Open your purchased book collection</a></p><p>Your first one-use gift link: <a href="'+safe(giftUrl)+'">Gift 1</a></p><p>Your second one-use gift link: <a href="'+safe(giftUrl2)+'">Gift 2</a></p><p>Keep your personal receipt link private. This is a one-time purchase, not a subscription.</p>'},'bundle-buyer-two-gifts-'+id);}catch(e){console.error('Barber buyer email failed',e?.code||e?.name);}
+send(res,200,page('Thank you for your purchase!','<p>Your one-time €24.99 purchase is verified. Your personal downloads:</p>'+list(await titles(pool,at,lang),'/barber/pdf?session_id='+encodeURIComponent(id)+'&slug=')+'<h2>Up to two gifts to give</h2><p>Gift link 1: <a href="'+safe(giftUrl)+'">'+safe(giftUrl)+'</a></p><p>Gift link 2: <a href="'+safe(giftUrl2)+'">'+safe(giftUrl2)+'</a></p><p>Send each gift link privately to a different person. Each link can be redeemed once. Do not share your personal purchase receipt link.</p>'));return true;
 }
 if(path==='/barber/pdf'&&req.method==='GET'){const s=await verified(stripe,id);if(!s){send(res,403,'Payment not verified','text/plain');return true;}await pdf(pool,res,slug,language(s),new Date(s.created*1000));return true;}
 if(path==='/barber/redeem'&&req.method==='GET'){
 if(!/^[a-f0-9]{64}$/.test(gift||'')){send(res,404,page('Invalid gift','Gift link not found.'));return true;}
-const q=await pool.query('SELECT claimed_at FROM aom_barber_gifts WHERE gift_hash=$1',[hash(gift)]);
+const q=await pool.query('SELECT CASE WHEN gift_hash=$1 THEN claimed_at ELSE claimed2_at END AS claimed_at FROM aom_barber_gifts WHERE gift_hash=$1 OR gift2_hash=$1',[hash(gift)]);
 if(!q.rowCount||q.rows[0].claimed_at){send(res,409,page('Gift unavailable','This gift was already claimed or is invalid.'));return true;}
-send(res,200,page('Claim your free book gift','<p>Your barber supporter has sent you a digital book gift. Choose one language. No payment required.</p><form method="post" action="/barber/redeem"><input type="hidden" name="gift" value="'+safe(gift)+'"><label>Email for your access link<input required type="email" name="email" maxlength="254"></label><label>Language<select name="language"><option value="en">English</option><option value="de">Deutsch</option><option value="pt-PT">Português</option></select></label><button>Redeem once</button></form><small>Email is for book delivery, not marketing.</small>'));return true;
+send(res,200,page('Claim your free book gift','<p>Someone has sent you a digital book gift. Choose one language. No payment required.</p><form method="post" action="/barber/redeem"><input type="hidden" name="gift" value="'+safe(gift)+'"><label>Email for your access link<input required type="email" name="email" maxlength="254"></label><label>Language<select name="language"><option value="en">English</option><option value="de">Deutsch</option><option value="pt-PT">Português</option></select></label><button>Redeem once</button></form><small>Email is for book delivery, not marketing.</small>'));return true;
 }
 if(path==='/barber/redeem'&&req.method==='POST'){
 const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>4096){send(res,413,'Too large','text/plain');return true;}chunks.push(chunk);}
 const f=new URLSearchParams(Buffer.concat(chunks).toString()),g=f.get('gift')||'',email=(f.get('email')||'').trim().toLowerCase(),lang=f.get('language')||'';
 if(!/^[a-f0-9]{64}$/.test(g)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||!langs.has(lang)){send(res,400,page('Invalid details','Check your gift, email and language.'));return true;}
 const bearer=randomBytes(32).toString('hex');
-const q=await pool.query('UPDATE aom_barber_gifts SET claimed_at=now(),recipient_email=$2,recipient_language=$3,access_hash=$4 WHERE gift_hash=$1 AND claimed_at IS NULL RETURNING session_id',[hash(g),email,lang,hash(bearer)]);
+const q=await pool.query('UPDATE aom_barber_gifts SET
+ claimed_at=CASE WHEN gift_hash=$1 THEN now() ELSE claimed_at END,
+ claimed2_at=CASE WHEN gift2_hash=$1 THEN now() ELSE claimed2_at END,
+ recipient_email=CASE WHEN gift_hash=$1 THEN $2 ELSE recipient_email END,
+ recipient2_email=CASE WHEN gift2_hash=$1 THEN $2 ELSE recipient2_email END,
+ recipient_language=CASE WHEN gift_hash=$1 THEN $3 ELSE recipient_language END,
+ recipient2_language=CASE WHEN gift2_hash=$1 THEN $3 ELSE recipient2_language END,
+ access_hash=CASE WHEN gift_hash=$1 THEN $4 ELSE access_hash END,
+ access2_hash=CASE WHEN gift2_hash=$1 THEN $4 ELSE access2_hash END
+ WHERE (gift_hash=$1 AND claimed_at IS NULL) OR (gift2_hash=$1 AND claimed2_at IS NULL) RETURNING session_id',[hash(g),email,lang,hash(bearer)]);
 if(!q.rowCount){send(res,409,page('Already redeemed','This gift has already been claimed.'));return true;}
 const link=new URL('/barber/books?access='+bearer,process.env.APP_URL).href;
-try{if(mailConfigured())await sendTransactionalMail({email,subject:'Your Authors On A Mission book gift',html:'<p>Open your private gifted books here: <a href="'+safe(link)+'">Download your books</a></p>'},'barber-gift-'+q.rows[0].session_id);}catch(e){console.error('Gift mail failed',e?.code||e?.name);}
+try{if(mailConfigured())await sendTransactionalMail({email,subject:'Your Authors On A Mission book gift',html:'<p>Open your private gifted books here: <a href="'+safe(link)+'">Download your books</a></p>'},'bundle-gift-'+q.rows[0].session_id+'-'+hash(g));}catch(e){console.error('Gift mail failed',e?.code||e?.name);}
 send(res,200,page('Your gift is ready','<p>Save this personal access link. Only you should use it.</p><p><a class="btn" href="'+safe(link)+'">Open my free books</a></p>'));return true;
 }
 if((path==='/barber/books'||path==='/barber/gift-pdf')&&req.method==='GET'){
 if(!/^[a-f0-9]{64}$/.test(access||'')){send(res,403,'Invalid gift access','text/plain');return true;}
-const q=await pool.query('SELECT purchased_at,recipient_language FROM aom_barber_gifts WHERE access_hash=$1 AND claimed_at IS NOT NULL',[hash(access)]);
+const q=await pool.query('SELECT purchased_at,CASE WHEN access_hash=$1 THEN recipient_language ELSE recipient2_language END AS recipient_language FROM aom_barber_gifts WHERE (access_hash=$1 AND claimed_at IS NOT NULL) OR (access2_hash=$1 AND claimed2_at IS NOT NULL)',[hash(access)]);
 if(!q.rowCount){send(res,403,'Gift access unavailable','text/plain');return true;}
 const p=q.rows[0];if(path==='/barber/gift-pdf'){await pdf(pool,res,slug,p.recipient_language,p.purchased_at);return true;}
 send(res,200,page('Your gifted books','<p>Your book collection in your selected language:</p>'+list(await titles(pool,p.purchased_at,p.recipient_language),'/barber/gift-pdf?access='+access+'&slug=')));return true;
