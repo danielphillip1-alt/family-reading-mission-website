@@ -11,7 +11,7 @@ const session={id:sid,livemode:true,mode:'payment',status:'complete',payment_sta
 function fixture(){
  let row=null;
  const pool={query:async(sql,p)=>{
-  if(sql.includes('INSERT INTO aom_barber_gifts')){row={session_id:p[0],purchased_at:p[1],gift_hash:p[4],gift2_hash:p[5],claimed_at:null,claimed2_at:null};return {rowCount:1,rows:[]};}
+  if(sql.includes('INSERT INTO aom_barber_gifts')){if(!row)row={session_id:p[0],purchased_at:p[1],gift_hash:p[4],gift2_hash:p[5],claimed_at:null,claimed2_at:null};return {rowCount:1,rows:[]};}
   if(sql.includes('SET gift1_invited_at=now()')||sql.includes('SET gift2_invited_at=now()')){
    const field=sql.includes('gift1_invited_at')?'invited1':'invited2';
    if(!row||row[field])return {rowCount:0,rows:[]};
