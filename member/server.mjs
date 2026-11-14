@@ -349,6 +349,7 @@ async function handleAuth(req, res, join) {
 
 async function checkout(memberId, billingPlan) {
   if (!['monthly', 'annual'].includes(billingPlan)) throw new Error('Invalid membership plan');
+  if (billingPlan === 'annual') return 'https://buy.stripe.com/8x2fZjgJ6equdzGfcdffy02';
   const selectedPrice = billingPlan === 'annual' ? STRIPE_ANNUAL_PRICE_ID : STRIPE_PRICE_ID;
   if (!selectedPrice) throw new Error('This membership plan has not been configured yet');
   const db = await pool.connect();
