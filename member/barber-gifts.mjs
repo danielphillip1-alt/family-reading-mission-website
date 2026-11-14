@@ -21,7 +21,7 @@ export async function sendCheckoutGiftInvitations({pool,session}) {
   const id=session.id;
   if(!/^cs_live_[A-Za-z0-9]{16,200}$/.test(id||''))return [];
   const buyer=String(session.customer_details?.email||session.customer_email||'').trim().toLowerCase();
-  if(!/^[^\\s@<>]+@[^\\s@<>]+\\.[^\\s@<>]+$/.test(buyer))return [];
+  if(!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(buyer))return [];
   const paidAt=new Date(session.created*1000),g1=code(id),g2=code(id,2);
   await pool.query(`INSERT INTO aom_barber_gifts
     (session_id,purchased_at,buyer_email,buyer_language,gift_hash,gift2_hash)
@@ -37,7 +37,7 @@ export async function sendCheckoutGiftInvitations({pool,session}) {
     const raw=session.custom_fields?.find(f=>f.key===key)?.text?.value;
     const email=String(raw||'').trim().toLowerCase();
     if(!email)continue;
-    if(email.length>254||!/^[^\\s@<>\\r\\n]+@[^\\s@<>\\r\\n]+\\.[^\\s@<>\\r\\n]+$/.test(email)){
+    if(email.length>254||!/^[^\s@<>\r\n]+@[^\s@<>\r\n]+\.[^\s@<>\r\n]+$/.test(email)){
       console.warn('Invalid gift recipient email in checkout',slot);continue;
     }
     const reserved=await pool.query(`UPDATE aom_barber_gifts SET ${col}=now()
