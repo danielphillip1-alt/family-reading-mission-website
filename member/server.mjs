@@ -197,13 +197,17 @@ const startupMigrations = pool ? pool.query(`
     recipient_language text CHECK(recipient_language IN ('en','de','pt-PT')),
     recipient2_language text CHECK(recipient2_language IN ('en','de','pt-PT')),
     access_hash text UNIQUE,
-    access2_hash text UNIQUE
+    access2_hash text UNIQUE,
+    gift1_invited_at timestamptz,
+    gift2_invited_at timestamptz
   );
   ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS gift2_hash text UNIQUE;
   ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS claimed2_at timestamptz;
   ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS recipient2_email text;
   ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS recipient2_language text;
   ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS access2_hash text UNIQUE;
+  ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS gift1_invited_at timestamptz;
+  ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS gift2_invited_at timestamptz;
   CREATE TABLE IF NOT EXISTS aom_legal_requests (
     id uuid PRIMARY KEY,
     kind text NOT NULL CHECK(kind IN ('cancel','withdraw')),
