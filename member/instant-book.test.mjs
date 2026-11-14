@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handlePurchaseDelivery} from './instant-book.mjs';
 const SESSION_ID='cs_live_'+('A'.repeat(40));
-function fixture({paid=true,active=true,knownLink=true,pdfReady=true}={}){
- const session={id:SESSION_ID,livemode:true,mode:'subscription',
-  payment_link:knownLink?'plink_1UbGQ6RuZKBP2B3nVEKI0Y7h':'plink_unknown',
+function fixture({paid=true,active=true,knownLink=true,pdfReady=true,oneTime=false}={}){
+ const session={id:SESSION_ID,livemode:true,mode:oneTime?'payment':'subscription',created:Math.floor(Date.now()/1000),
+  payment_link:knownLink?(oneTime?'plink_1UbnI3RuZKBP2B3nC5X50brU':'plink_1UbGQ6RuZKBP2B3nVEKI0Y7h'):'plink_unknown',
   status:paid?'complete':'open',payment_status:paid?'paid':'unpaid',
   subscription:'sub_test',customer:'cus_test',
   custom_fields:[{key:'booklanguage',dropdown:{value:'de'}}]};
@@ -45,7 +45,7 @@ test('Paid live subscriber can open checkout success page and choose German',asy
  const f=await call('/purchase-success?session_id='+SESSION_ID);
  assert.equal(f.res.status,200);
  assert.match(f.res.body,/Download full book — Deutsch/);
- assert.match(f.res.body,/Manage or cancel your membership/);
+ assert.match(f.res.body,/Manage or cancel your monthly membership/);
 });
 test('Book requires a verified payment and returns private PDF attachment',async()=>{
  const f=await call('/purchase-book?session_id='+SESSION_ID+'&lang=de');
@@ -56,6 +56,19 @@ test('Book requires a verified payment and returns private PDF attachment',async
  assert.equal(f.queries[0].params[0],'de');
 });
 test('Do not silently substitute a missing language',async()=>{
- const f=await call('/purchase-book?session_id='+SESSION_ID+'&lang=pt-PT',{pdfReady:false});
+ const f=await call('/purchase-book?session_id='+SESSION_ID+'&lang=de',{pdfReady:false});
  assert.equal(f.res.status,503);
+});
+
+test('A one-time annual purchase grants only the chosen language for twelve months without a recurring subscription',async()=>{
+ const paid=await call('/purchase-success?session_id='+SESSION_ID,{oneTime:true});
+ assert.equal(paid.res.status,200);
+ assert.match(paid.res.body,/You paid once for twelve months of access/);
+ assert.doesNotMatch(paid.res.body,/Manage or cancel your monthly membership/);
+ const wrong=await call('/purchase-book?session_id='+SESSION_ID+'&lang=en',{oneTime:true});
+ assert.equal(wrong.res.status,403);
+ assert.equal(wrong.queries.length,0);
+ const allowed=await call('/purchase-book?session_id='+SESSION_ID+'&lang=de',{oneTime:true});
+ assert.equal(allowed.res.status,200);
+ assert.equal(allowed.res.headers['Content-Type'],'application/pdf');
 });
