@@ -520,9 +520,9 @@ const server = createServer(async (req, res) => {
       const cycleLabel = cycleStart.getUTCFullYear();
       return send(res, 200, page(productionMode ? 'Your membership' : 'Your test membership', `
         ${notice && `<p role="status">${notice}</p>`}
-        <p>Choose your plan. Both renew automatically unless you cancel before your next renewal date. Cancel through Manage membership and keep access until the paid period ends.</p>
+        <p>Choose your plan. The €3.99 monthly membership renews until canceled. The €39.99 annual package is paid once for 12 months of access and does not renew automatically.</p>
         <section aria-labelledby="reading-year"><h2 id="reading-year" data-released="${readyCount}">Your reading year: November ${cycleLabel} – October ${cycleLabel+1}</h2>
-        <p><strong>${readyCount} approved ${readyCount===1?'book has':'books have'} been released</strong> so far in this reading cycle. All released books available in your selected language are unlocked with an active membership. New books and their accompanying reading activities become available as they are published. The November reading cycle is separate from the billing anniversary: a yearly subscription renews 12 months after you sign up, not automatically every November.</p>
+        <p><strong>${readyCount} approved ${readyCount===1?'book has':'books have'} been released</strong> so far in this reading cycle. All released books available in your selected language are unlocked with an active membership. New books and their accompanying reading activities become available as they are published. The November reading cycle is separate from your payment date: the annual package gives 12 months of access from the date of purchase, with no automatic renewal.</p>
         <p>Example: If you join in March after four monthly books have been published (November through February), all four are available immediately. You then receive new publications as they are released while your subscription is active.</p></section>
         <form class="plan-checkout" method="post" action="/checkout">
           <input type="hidden" name="plan" value="monthly">
@@ -530,13 +530,13 @@ const server = createServer(async (req, res) => {
         </form>
         <form class="plan-checkout" method="post" action="/checkout">
           <input type="hidden" name="plan" value="annual">
-          <button>€39.99 per year — 2 months free; renews annually</button>
+          <button>€39.99 one-time payment — 12 months of access; no renewal</button>
         </form>
-        <p>Annual membership saves €7.98 (16.7%) compared with 12 monthly payments. Taxes are included where applicable.</p>
+        <p>One-time annual package saves €7.89 (16.5%) compared with 12 monthly payments. Taxes are included where applicable.</p>
         <dialog id="aom-plan-dialog" aria-labelledby="plan-dialog-heading" style="max-width:28rem;border:1px solid #073d2e;border-radius:1rem;padding:1.5rem">
           <h2 id="plan-dialog-heading">Before you subscribe</h2>
           <p id="plan-dialog-text"></p>
-          <p>You can cancel automatic renewal in Manage membership. Access continues until the end of your paid term.</p>
+          <p>The monthly option renews until canceled. The annual package has no automatic renewal; access ends after 12 months unless you purchase another package.</p>
           <button type="button" id="confirm-plan">Continue to secure payment</button>
           <button type="button" id="close-plan" style="background:#eee;color:#073d2e">Go back</button>
         </dialog>
@@ -549,7 +549,7 @@ const server = createServer(async (req, res) => {
               const annual=f.querySelector('[name=plan]').value==='annual';
               document.getElementById('plan-dialog-text').textContent=
                 String(document.getElementById('reading-year').dataset.released) + ' approved book(s) have been released in the current November-to-October reading cycle. You can access previously published books immediately, with new releases arriving during your active membership. '+
-                (annual?'€39.99 will be charged now and automatically every 12 months unless you cancel.':'€3.99 will be charged now and automatically every month unless you cancel.');
+                (annual?'€39.99 will be charged once for 12 months of access. There is no automatic annual renewal.':'€3.99 will be charged now and automatically every month unless you cancel.');
               d.showModal();
             }));
             document.getElementById('close-plan').onclick=()=>d.close();
