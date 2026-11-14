@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import {sendCheckoutGiftInvitations} from './barber-gifts.mjs';
 
 const RELEVANT_EVENTS = new Set(['checkout.session.completed','customer.subscription.created','customer.subscription.updated','customer.subscription.deleted','invoice.paid','invoice.payment_failed']);
 const MAX_PAYLOAD=1024*1024;
@@ -98,6 +99,12 @@ export async function handleStripeWebhook({req,res,stripe,pool,secret}) {
       }
     }
     await client.query('COMMIT');
+    // Gift invitations are sent only for a verified, paid one-time bundle checkout.
+    // Both email fields are optional. The buyer can also share gift links later.
+    if(event.type==='checkout.session.completed' && data.payment_link==='plink_1UboGGRuZKBP2B3nzmcAPiQL'){
+      try{await sendCheckoutGiftInvitations({pool,session:data});}
+      catch(e){console.error('Checkout gift invitations deferred',e?.code||e?.name);}
+    }
     res.writeHead(200);res.end('ok');
   }catch(e){
     try{await client.query('ROLLBACK');}catch{}
