@@ -12,6 +12,53 @@ async function verified(stripe,id){if(!/^cs_live_[a-zA-Z0-9]{16,200}$/.test(id||
 async function titles(pool,at,lang){const q=await pool.query("SELECT r.slug FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.status='published' AND r.published_at<=$1 ORDER BY r.slug",[at,lang]);return q.rows.map(x=>x.slug);}
 async function pdf(pool,res,slug,lang,at){if(!/^[a-z0-9-]{3,80}$/.test(slug||''))return send(res,400,'Invalid title','text/plain');const q=await pool.query("SELECT f.pdf_content FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.slug=$1 AND r.status='published' AND r.published_at<=$3 LIMIT 1",[slug,lang,at]);if(!q.rowCount)return send(res,404,'This book is not included in your purchased collection.','text/plain');const b=q.rows[0].pdf_content;res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="AOM-'+slug+'-'+lang+'.pdf"','Content-Length':b.length,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end(b);}
 const list=(slugs,base)=>slugs.length?'<ul>'+slugs.map(s=>'<li><a class="btn" href="'+base+encodeURIComponent(s)+'">'+safe(s.replaceAll('-',' '))+' (PDF)</a></li>').join('')+'</ul>':'<p>No approved files are currently available for this language. Please contact support with your payment receipt.</p>';
+// Stripe-verified paid checkouts may supply two optional recipient email addresses.
+// The purchase remains valid when either email is blank; the customer can share links later.
+// A database update reserves each invitation slot to avoid duplicate sends on refresh.
+export async function sendCheckoutGiftInvitations({pool,session}) {
+  if(!session||session.payment_link!==LINK||session.livemode!==true||
+     session.mode!=='payment'||session.status!=='complete'||session.payment_status!=='paid')return [];
+  const id=session.id;
+  if(!/^cs_live_[A-Za-z0-9]{16,200}$/.test(id||''))return [];
+  const buyer=String(session.customer_details?.email||session.customer_email||'').trim().toLowerCase();
+  if(!/^[^\\s@<>]+@[^\\s@<>]+\\.[^\\s@<>]+$/.test(buyer))return [];
+  const paidAt=new Date(session.created*1000),g1=code(id),g2=code(id,2);
+  await pool.query(`INSERT INTO aom_barber_gifts
+    (session_id,purchased_at,buyer_email,buyer_language,gift_hash,gift2_hash)
+    VALUES ($1,$2,$3,$4,$5,$6)
+    ON CONFLICT (session_id) DO UPDATE
+    SET gift2_hash=COALESCE(aom_barber_gifts.gift2_hash,excluded.gift2_hash)`,
+    [id,paidAt,buyer,language(session),hash(g1),hash(g2)]);
+  if(!mailConfigured())return [];
+  const sent=[];
+  for(const [slot,key,token,col] of [
+    [1,'giftoneemail',g1,'gift1_invited_at'],
+    [2,'gifttwoemail',g2,'gift2_invited_at']]){
+    const raw=session.custom_fields?.find(f=>f.key===key)?.text?.value;
+    const email=String(raw||'').trim().toLowerCase();
+    if(!email)continue;
+    if(email.length>254||!/^[^\\s@<>\\r\\n]+@[^\\s@<>\\r\\n]+\\.[^\\s@<>\\r\\n]+$/.test(email)){
+      console.warn('Invalid gift recipient email in checkout',slot);continue;
+    }
+    const reserved=await pool.query(`UPDATE aom_barber_gifts SET ${col}=now()
+      WHERE session_id=$1 AND ${col} IS NULL RETURNING session_id`,[id]);
+    if(!reserved.rowCount)continue;
+    const url=new URL('/barber/redeem?gift='+token,process.env.APP_URL).href;
+    try{
+      await sendTransactionalMail({
+        email,subject:'A gift for you: Authors On A Mission books',
+        html:'<p>Someone has gifted you a children\'s book bundle from Authors On A Mission.</p>'+
+         '<p><a href="'+safe(url)+'">Accept your free book gift</a></p>'+
+         '<p>Choose your preferred reading language when you claim it. This gift is free and the link can be redeemed once.</p>'
+      },'bundle-gift-invite-'+id+'-'+slot);
+      sent.push(slot);
+    }catch(e){
+      await pool.query(`UPDATE aom_barber_gifts SET ${col}=NULL WHERE session_id=$1`,[id]);
+      console.error('Gift invitation delivery failed',slot,e?.code||e?.name);
+    }
+  }
+  return sent;
+}
 export async function handleBarber({req,res,url,stripe,pool}){
 if(!url.pathname.startsWith('/barber/'))return false;
 if(!stripe||!pool){send(res,503,page('Service unavailable','Please contact support.'));return true;}
@@ -23,6 +70,7 @@ const at=new Date(s.created*1000),lang=language(s),g=code(id),g2=code(id,2),emai
 await pool.query('INSERT INTO aom_barber_gifts(session_id,purchased_at,buyer_email,buyer_language,gift_hash,gift2_hash) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(session_id) DO UPDATE SET gift2_hash=COALESCE(aom_barber_gifts.gift2_hash,EXCLUDED.gift2_hash)',[id,at,email,lang,hash(g),hash(g2)]);
 const giftUrl=new URL('/barber/redeem?gift='+g,process.env.APP_URL).href;
 const giftUrl2=new URL('/barber/redeem?gift='+g2,process.env.APP_URL).href;
+await sendCheckoutGiftInvitations({pool,session:s});
 try{if(email&&mailConfigured())await sendTransactionalMail({email,subject:'Your digital book bundle and two gift links',html:'<p>Thank you for supporting Authors On A Mission.</p><p>Your personal books: <a href="'+safe(new URL('/barber/thanks?session_id='+id,process.env.APP_URL).href)+'">Open your purchased book collection</a></p><p>Your first one-use gift link: <a href="'+safe(giftUrl)+'">Gift 1</a></p><p>Your second one-use gift link: <a href="'+safe(giftUrl2)+'">Gift 2</a></p><p>Keep your personal receipt link private. This is a one-time purchase, not a subscription.</p>'},'bundle-buyer-two-gifts-'+id);}catch(e){console.error('Barber buyer email failed',e?.code||e?.name);}
 send(res,200,page('Thank you for your purchase!','<p>Your one-time €24.99 purchase is verified. Your personal downloads:</p>'+list(await titles(pool,at,lang),'/barber/pdf?session_id='+encodeURIComponent(id)+'&slug=')+'<h2>Up to two gifts to give</h2><p>Gift link 1: <a href="'+safe(giftUrl)+'">'+safe(giftUrl)+'</a></p><p>Gift link 2: <a href="'+safe(giftUrl2)+'">'+safe(giftUrl2)+'</a></p><p>Send each gift link privately to a different person. Each link can be redeemed once. Do not share your personal purchase receipt link.</p>'));return true;
 }
