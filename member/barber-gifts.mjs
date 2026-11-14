@@ -38,7 +38,7 @@ const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(s
 const f=new URLSearchParams(Buffer.concat(chunks).toString()),g=f.get('gift')||'',email=(f.get('email')||'').trim().toLowerCase(),lang=f.get('language')||'';
 if(!/^[a-f0-9]{64}$/.test(g)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||!langs.has(lang)){send(res,400,page('Invalid details','Check your gift, email and language.'));return true;}
 const bearer=randomBytes(32).toString('hex');
-const q=await pool.query('UPDATE aom_barber_gifts SET
+const q=await pool.query(`UPDATE aom_barber_gifts SET
  claimed_at=CASE WHEN gift_hash=$1 THEN now() ELSE claimed_at END,
  claimed2_at=CASE WHEN gift2_hash=$1 THEN now() ELSE claimed2_at END,
  recipient_email=CASE WHEN gift_hash=$1 THEN $2 ELSE recipient_email END,
@@ -47,7 +47,7 @@ const q=await pool.query('UPDATE aom_barber_gifts SET
  recipient2_language=CASE WHEN gift2_hash=$1 THEN $3 ELSE recipient2_language END,
  access_hash=CASE WHEN gift_hash=$1 THEN $4 ELSE access_hash END,
  access2_hash=CASE WHEN gift2_hash=$1 THEN $4 ELSE access2_hash END
- WHERE (gift_hash=$1 AND claimed_at IS NULL) OR (gift2_hash=$1 AND claimed2_at IS NULL) RETURNING session_id',[hash(g),email,lang,hash(bearer)]);
+ WHERE (gift_hash=$1 AND claimed_at IS NULL) OR (gift2_hash=$1 AND claimed2_at IS NULL) RETURNING session_id`,[hash(g),email,lang,hash(bearer)]);
 if(!q.rowCount){send(res,409,page('Already redeemed','This gift has already been claimed.'));return true;}
 const link=new URL('/barber/books?access='+bearer,process.env.APP_URL).href;
 try{if(mailConfigured())await sendTransactionalMail({email,subject:'Your Authors On A Mission book gift',html:'<p>Open your private gifted books here: <a href="'+safe(link)+'">Download your books</a></p>'},'bundle-gift-'+q.rows[0].session_id+'-'+hash(g));}catch(e){console.error('Gift mail failed',e?.code||e?.name);}
