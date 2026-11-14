@@ -10,6 +10,7 @@ import {mailConfigured} from './mail.mjs';
 import {handleLegalRequest} from './legal-requests.mjs';
 import {importApprovedBookOne} from './import-approved-books.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
+import {handleBarber} from './barber-gifts.mjs';
 import {testFirstBookDelivery,testTranslatedBooksDelivery} from './delivery-smoke.mjs';
 
 
@@ -182,6 +183,17 @@ const startupMigrations = pool ? pool.query(`
     UNIQUE(stripe_subscription_id, release_id)
   );
   CREATE INDEX IF NOT EXISTS aom_link_delivery_pending_idx ON aom_payment_link_delivery_outbox(state,next_attempt_at);
+  CREATE TABLE IF NOT EXISTS aom_barber_gifts (
+    session_id text PRIMARY KEY,
+    purchased_at timestamptz NOT NULL,
+    buyer_email text NOT NULL,
+    buyer_language text NOT NULL CHECK(buyer_language IN ('en','de','pt-PT')),
+    gift_hash text NOT NULL UNIQUE,
+    claimed_at timestamptz,
+    recipient_email text,
+    recipient_language text CHECK(recipient_language IN ('en','de','pt-PT')),
+    access_hash text UNIQUE
+  );
   CREATE TABLE IF NOT EXISTS aom_legal_requests (
     id uuid PRIMARY KEY,
     kind text NOT NULL CHECK(kind IN ('cancel','withdraw')),
@@ -500,6 +512,7 @@ const server = createServer(async (req, res) => {
       }
     }
     if (!pool) return send(res, 503, page('Member setup pending', '<p>The membership database connection is temporarily unavailable.</p>'));
+    if (await handleBarber({req,res,url,stripe,pool})) return;
     if (await handlePurchaseDelivery({req,res,url,stripe,pool})) return;
     if (pathname.startsWith('/api/') && await handleBooks(req,res,url,currentMember,pool)) return;
     if (pathname === '/register' || pathname === '/signin') {
