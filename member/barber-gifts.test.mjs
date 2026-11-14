@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {handleBarber} from './barber-gifts.mjs';
+import {handleBarber,sendCheckoutGiftInvitations} from './barber-gifts.mjs';
 process.env.AOM_BARBER_GIFT_SECRET='test-only-secret';
 process.env.APP_URL='https://example.test';
 const sid='cs_live_'+('B'.repeat(40));
@@ -12,6 +12,15 @@ function fixture(){
  let row=null;
  const pool={query:async(sql,p)=>{
   if(sql.includes('INSERT INTO aom_barber_gifts')){row={session_id:p[0],purchased_at:p[1],gift_hash:p[4],gift2_hash:p[5],claimed_at:null,claimed2_at:null};return {rowCount:1,rows:[]};}
+  if(sql.includes('SET gift1_invited_at=now()')||sql.includes('SET gift2_invited_at=now()')){
+   const field=sql.includes('gift1_invited_at')?'invited1':'invited2';
+   if(!row||row[field])return {rowCount:0,rows:[]};
+   row[field]=true;return {rowCount:1,rows:[{session_id:row.session_id}]};
+  }
+  if(sql.includes('SET gift1_invited_at=NULL')||sql.includes('SET gift2_invited_at=NULL')){
+   if(row)row[sql.includes('gift1_invited_at')?'invited1':'invited2']=false;
+   return {rowCount:1,rows:[]};
+  }
   if(sql.startsWith('SELECT r.slug'))return {rowCount:1,rows:[{slug:'zachary-my-unique-hat-2026-11'}]};
   if(sql.includes('SELECT CASE WHEN gift_hash=$1 THEN claimed_at'))return row&&(row.gift_hash===p[0]||row.gift2_hash===p[0])?{rowCount:1,rows:[{claimed_at:row.gift_hash===p[0]?row.claimed_at:row.claimed2_at}]}:{rowCount:0,rows:[]};
   if(sql.includes('UPDATE aom_barber_gifts SET')&&sql.includes('claimed2_at')){
@@ -50,5 +59,28 @@ test('Two distinct, single-use gift links redeem separately and in different lan
   const link=post.res.body.match(/\/barber\/books\?access=([a-f0-9]{64})/);assert.ok(link);
   const read=await request(f,'/barber/books?access='+link[1]);assert.equal(read.res.status,200);
   const twice=await request(f,'/barber/redeem','POST','gift='+token+'&email=x%40example.test&language=en');assert.equal(twice.res.status,409);
+ }
+});
+
+test('Paid checkout emails exactly two invited recipients and never repeats on refresh',async()=>{
+ const f=fixture();const prev={key:process.env.AOM_RESEND_API_KEY,from:process.env.AOM_FROM_EMAIL,fetch:globalThis.fetch};
+ const sent=[];
+ try{
+  process.env.AOM_RESEND_API_KEY='test-key';
+  process.env.AOM_FROM_EMAIL='book@example.test';
+  globalThis.fetch=async(_url,options)=>{const body=JSON.parse(options.body);sent.push(body.to[0]);return {ok:true,json:async()=>({id:'test'})}};
+  const paid={...session,custom_fields:[...session.custom_fields,
+    {key:'giftoneemail',text:{value:'parent1@example.test'}},
+    {key:'gifttwoemail',text:{value:'parent2@example.test'}}]};
+  await sendCheckoutGiftInvitations({pool:f.pool,session:paid});
+  await sendCheckoutGiftInvitations({pool:f.pool,session:paid});
+  assert.deepEqual(sent,['parent1@example.test','parent2@example.test']);
+  const unpaid={...paid,payment_status:'unpaid'};
+  assert.deepEqual(await sendCheckoutGiftInvitations({pool:f.pool,session:unpaid}),[]);
+  assert.equal(sent.length,2);
+ }finally{
+  if(prev.key===undefined)delete process.env.AOM_RESEND_API_KEY;else process.env.AOM_RESEND_API_KEY=prev.key;
+  if(prev.from===undefined)delete process.env.AOM_FROM_EMAIL;else process.env.AOM_FROM_EMAIL=prev.from;
+  globalThis.fetch=prev.fetch;
  }
 });
