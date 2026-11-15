@@ -15,7 +15,7 @@ const list=(slugs,base)=>slugs.length?'<ul>'+slugs.map(s=>'<li><a class="btn" hr
 // Stripe-verified paid checkouts may supply two optional recipient email addresses.
 // The purchase remains valid when either email is blank; the customer can share links later.
 // A database update reserves each invitation slot to avoid duplicate sends on refresh.
-export async function sendCheckoutGiftInvitations({pool,session}) {
+export async function sendCheckoutGiftInvitations({pool,session,personalization=null}) {
   if(!session||session.payment_link!==LINK||session.livemode!==true||
      session.mode!=='payment'||session.status!=='complete'||session.payment_status!=='paid')return [];
   const id=session.id;
@@ -43,11 +43,11 @@ export async function sendCheckoutGiftInvitations({pool,session}) {
     const reserved=await pool.query(`UPDATE aom_barber_gifts SET ${col}=now()
       WHERE session_id=$1 AND ${col} IS NULL RETURNING session_id`,[id]);
     if(!reserved.rowCount)continue;
-    const url=new URL('/barber/redeem?gift='+token,process.env.APP_URL).href;
+    const url=new URL('/barber/open?gift='+token,process.env.APP_URL).href;
     try{
       await sendTransactionalMail({
-        email,subject:'A gift for you: Authors On A Mission books',
-        html:'<p>Someone has gifted you a children\'s book bundle from Authors On A Mission.</p>'+
+        email,subject:personalization?((slot===1?personalization.recipient1_name:personalization.recipient2_name)+', '+personalization.sender_name+' from '+personalization.barber_shop_name+' sent you a gift'):'A gift for you: Authors On A Mission books',
+        html:(personalization?'<p>'+safe(personalization.sender_name)+' from '+safe(personalization.barber_shop_name)+' sent '+safe(slot===1?personalization.recipient1_name:personalization.recipient2_name)+' a digital book gift!</p>':'<p>Someone has gifted you a children\'s book bundle from Authors On A Mission.</p>')+
          '<p><a href="'+safe(url)+'">Accept your free book gift</a></p>'+
          '<p>Choose your preferred reading language when you claim it. This gift is free and the link can be redeemed once.</p>'
       },'bundle-gift-invite-'+id+'-'+slot);
@@ -68,11 +68,11 @@ if(path==='/barber/thanks'&&req.method==='GET'){
 const s=await verified(stripe,id);if(!s){send(res,403,page('Payment not verified','Please complete checkout first.'));return true;}
 const at=new Date(s.created*1000),lang=language(s),g=code(id),g2=code(id,2),email=(s.customer_details?.email||s.customer_email||'').toLowerCase();
 await pool.query('INSERT INTO aom_barber_gifts(session_id,purchased_at,buyer_email,buyer_language,gift_hash,gift2_hash) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(session_id) DO UPDATE SET gift2_hash=COALESCE(aom_barber_gifts.gift2_hash,EXCLUDED.gift2_hash)',[id,at,email,lang,hash(g),hash(g2)]);
-const giftUrl=new URL('/barber/redeem?gift='+g,process.env.APP_URL).href;
-const giftUrl2=new URL('/barber/redeem?gift='+g2,process.env.APP_URL).href;
-await sendCheckoutGiftInvitations({pool,session:s});
-try{if(email&&mailConfigured())await sendTransactionalMail({email,subject:'Your digital book bundle and two gift links',html:'<p>Thank you for supporting Authors On A Mission.</p><p>Your personal books: <a href="'+safe(new URL('/barber/thanks?session_id='+id,process.env.APP_URL).href)+'">Open your purchased book collection</a></p><p>Your first one-use gift link: <a href="'+safe(giftUrl)+'">Gift 1</a></p><p>Your second one-use gift link: <a href="'+safe(giftUrl2)+'">Gift 2</a></p><p>Keep your personal receipt link private. This is a one-time purchase, not a subscription.</p>'},'bundle-buyer-two-gifts-'+id);}catch(e){console.error('Barber buyer email failed',e?.code||e?.name);}
-send(res,200,page('Thank you for your purchase!','<p>Your one-time €24.99 purchase is verified. Your personal downloads:</p>'+list(await titles(pool,at,lang),'/barber/pdf?session_id='+encodeURIComponent(id)+'&slug=')+'<h2>Up to two gifts to give</h2><p>Gift link 1: <a href="'+safe(giftUrl)+'">'+safe(giftUrl)+'</a></p><p>Gift link 2: <a href="'+safe(giftUrl2)+'">'+safe(giftUrl2)+'</a></p><p>Send each gift link privately to a different person. Each link can be redeemed once. Do not share your personal purchase receipt link.</p>'));return true;
+const giftUrl=new URL('/barber/open?gift='+g,process.env.APP_URL).href;
+const giftUrl2=new URL('/barber/open?gift='+g2,process.env.APP_URL).href;
+// Recipient emails wait for a completed personalization form and permission.
+try{if(email&&mailConfigured())await sendTransactionalMail({email,subject:'Your digital book bundle and personalized gift links',html:'<p>Thank you for supporting Authors On A Mission.</p><p>Your personal books: <a href="'+safe(new URL('/barber/thanks?session_id='+id,process.env.APP_URL).href)+'">Open your purchased book collection</a></p><p><strong>Personalize gifts:</strong> <a href="'+safe(new URL('/barber/setup?session_id='+id,process.env.APP_URL).href)+'">Enter sender, barbershop and recipient names</a></p><p>Your first one-use gift link: <a href="'+safe(giftUrl)+'">Gift 1</a></p><p>Your second one-use gift link: <a href="'+safe(giftUrl2)+'">Gift 2</a></p><p>Keep your personal receipt link private. This is a one-time purchase, not a subscription.</p>'},'bundle-buyer-two-gifts-'+id);}catch(e){console.error('Barber buyer email failed',e?.code||e?.name);}
+send(res,200,page('Thank you for your purchase!','<p>Your one-time €24.99 purchase is verified. Your personal downloads:</p>'+list(await titles(pool,at,lang),'/barber/pdf?session_id='+encodeURIComponent(id)+'&slug=')+'<h2>Personalize your two gifts</h2><p><a class="btn" href="'+safe(new URL('/barber/setup?session_id='+id,process.env.APP_URL).href)+'">Enter names for the gift page</a></p><h2>Up to two gifts to give</h2><p>Gift link 1: <a href="'+safe(giftUrl)+'">'+safe(giftUrl)+'</a></p><p>Gift link 2: <a href="'+safe(giftUrl2)+'">'+safe(giftUrl2)+'</a></p><p>Send each gift link privately to a different person. Each link can be redeemed once. Do not share your personal purchase receipt link.</p>'));return true;
 }
 if(path==='/barber/pdf'&&req.method==='GET'){const s=await verified(stripe,id);if(!s){send(res,403,'Payment not verified','text/plain');return true;}await pdf(pool,res,slug,language(s),new Date(s.created*1000));return true;}
 if(path==='/barber/redeem'&&req.method==='GET'){
