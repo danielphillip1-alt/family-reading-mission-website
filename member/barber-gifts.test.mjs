@@ -22,7 +22,7 @@ function fixture(fullCatalog=false){
    if(row)row[sql.includes('gift1_invited_at')?'invited1':'invited2']=false;
    return {rowCount:1,rows:[]};
   }
-  if(sql.startsWith('SELECT r.slug')){const rows=fullCatalog?[{slug:'book-one'},{slug:'book-two'},{slug:'book-three'},{slug:'book-four'}]:[{slug:'zachary-my-unique-hat-2026-11'}];return {rowCount:rows.length,rows};}
+  if(sql.startsWith('SELECT r.slug')){const rows=fullCatalog?[{slug:'zachary-my-unique-hat-2026-11'},{slug:'zachary-school-that-believed-in-him'},{slug:'emir-boy-who-never-smiles'},{slug:'emir-barbershop-boys-and-salon-girls'}]:[{slug:'zachary-my-unique-hat-2026-11'}];return {rowCount:rows.length,rows};}
   if(sql.includes('SELECT CASE WHEN gift_hash=$1 THEN claimed_at'))return row&&(row.gift_hash===p[0]||row.gift2_hash===p[0])?{rowCount:1,rows:[{claimed_at:row.gift_hash===p[0]?row.claimed_at:row.claimed2_at}]}:{rowCount:0,rows:[]};
   if(sql.includes('UPDATE aom_barber_gifts SET')&&sql.includes('claimed2_at')){
    const first=row?.gift_hash===p[0],second=row?.gift2_hash===p[0];
