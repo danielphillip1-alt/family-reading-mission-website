@@ -1,3 +1,4 @@
+import {createHmac} from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handleBarber,sendCheckoutGiftInvitations} from './barber-gifts.mjs';
@@ -50,7 +51,8 @@ test('Two distinct, single-use gift links redeem separately and in different lan
  const f=fixture();const x=await request(f,'/barber/thanks?session_id='+sid);
  assert.equal(x.res.status,200);
  assert.match(x.res.body,/Your personal downloads/);
- const tokens=[...x.res.body.matchAll(/gift=([a-f0-9]{64})/g)].map(a=>a[1]);
+ assert.match(x.res.body,/Personalize your two gifts/);
+ const tokens=[1,2].map(slot=>createHmac('sha256',process.env.AOM_BARBER_GIFT_SECRET).update(slot===1?'gift:'+sid:'gift2:'+sid).digest('hex'));
  assert.equal(new Set(tokens).size,2);
  for(const [i,token] of [...new Set(tokens)].entries()){
   const view=await request(f,'/barber/redeem?gift='+token);assert.equal(view.res.status,200);
