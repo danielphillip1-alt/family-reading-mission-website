@@ -11,6 +11,7 @@ import {handleLegalRequest} from './legal-requests.mjs';
 import {importApprovedBookOne} from './import-approved-books.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
 import {handleBarber} from './barber-gifts.mjs';
+import {handleGiftPersonalization} from './gift-personalization.mjs';
 import {testFirstBookDelivery,testTranslatedBooksDelivery} from './delivery-smoke.mjs';
 
 
@@ -208,6 +209,10 @@ const startupMigrations = pool ? pool.query(`
   ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS access2_hash text UNIQUE;
   ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS gift1_invited_at timestamptz;
   ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS gift2_invited_at timestamptz;
+  ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS sender_name text;
+  ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS barber_shop_name text;
+  ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS recipient1_name text;
+  ALTER TABLE aom_barber_gifts ADD COLUMN IF NOT EXISTS recipient2_name text;
   CREATE TABLE IF NOT EXISTS aom_legal_requests (
     id uuid PRIMARY KEY,
     kind text NOT NULL CHECK(kind IN ('cancel','withdraw')),
@@ -526,6 +531,7 @@ const server = createServer(async (req, res) => {
       }
     }
     if (!pool) return send(res, 503, page('Member setup pending', '<p>The membership database connection is temporarily unavailable.</p>'));
+    if (await handleGiftPersonalization({req,res,url,stripe,pool})) return;
     if (await handleBarber({req,res,url,stripe,pool})) return;
     if (await handlePurchaseDelivery({req,res,url,stripe,pool})) return;
     if (pathname.startsWith('/api/') && await handleBooks(req,res,url,currentMember,pool)) return;
