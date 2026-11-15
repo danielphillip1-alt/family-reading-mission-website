@@ -64,6 +64,7 @@ if(!url.pathname.startsWith('/barber/'))return false;
 if(!stripe||!pool){send(res,503,page('Service unavailable','Please contact support.'));return true;}
 try{
 const path=url.pathname,id=url.searchParams.get('session_id'),gift=url.searchParams.get('gift'),access=url.searchParams.get('access'),slug=url.searchParams.get('slug');
+if(path==='/barber/catalog-status'&&req.method==='GET'){const now=new Date();const out={};for(const lang of langs)out[lang]=await titles(pool,now,lang);send(res,200,JSON.stringify({publishedBooksByLanguage:out}),'application/json; charset=utf-8');return true;}
 if(path==='/barber/thanks'&&req.method==='GET'){
 const s=await verified(stripe,id);if(!s){send(res,403,page('Payment not verified','Please complete checkout first.'));return true;}
 const at=new Date(s.created*1000),lang=language(s),g=code(id),g2=code(id,2),email=(s.customer_details?.email||s.customer_email||'').toLowerCase();
