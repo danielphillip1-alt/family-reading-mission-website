@@ -99,12 +99,8 @@ export async function handleStripeWebhook({req,res,stripe,pool,secret}) {
       }
     }
     await client.query('COMMIT');
-    // Gift invitations are sent only for a verified, paid one-time bundle checkout.
-    // Both email fields are optional. The buyer can also share gift links later.
-    if(event.type==='checkout.session.completed' && data.payment_link==='plink_1UboGGRuZKBP2B3nzmcAPiQL'){
-      try{await sendCheckoutGiftInvitations({pool,session:data});}
-      catch(e){console.error('Checkout gift invitations deferred',e?.code||e?.name);}
-    }
+    // Do not email third-party recipients before the purchaser personalizes gifts and confirms permission.
+    // Buyer may share personalized links directly after a verified checkout.
     res.writeHead(200);res.end('ok');
   }catch(e){
     try{await client.query('ROLLBACK');}catch{}
