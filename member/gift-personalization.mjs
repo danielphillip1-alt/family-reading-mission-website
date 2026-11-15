@@ -1,6 +1,6 @@
 import {createHash,createHmac} from 'node:crypto';
 import {sendCheckoutGiftInvitations} from './barber-gifts.mjs';
-const SITE='https://www.theauthorsmission.de';
+const SITE='https://theauthorsmission.de';
 const PAYMENT_LINK='plink_1UboGGRuZKBP2B3nzmcAPiQL';
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
