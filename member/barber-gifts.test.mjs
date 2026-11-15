@@ -9,7 +9,7 @@ const session={id:sid,livemode:true,mode:'payment',status:'complete',payment_sta
  payment_link:'plink_1UboGGRuZKBP2B3nzmcAPiQL',currency:'eur',amount_total:2499,
  created:Math.floor(Date.now()/1000),customer_details:{email:'supporter@example.test'},
  custom_fields:[{key:'booklanguage',dropdown:{value:'de'}}]};
-function fixture(){
+function fixture(fullCatalog=false){
  let row=null;
  const pool={query:async(sql,p)=>{
   if(sql.includes('INSERT INTO aom_barber_gifts')){if(!row)row={session_id:p[0],purchased_at:p[1],gift_hash:p[4],gift2_hash:p[5],claimed_at:null,claimed2_at:null};return {rowCount:1,rows:[]};}
@@ -22,7 +22,7 @@ function fixture(){
    if(row)row[sql.includes('gift1_invited_at')?'invited1':'invited2']=false;
    return {rowCount:1,rows:[]};
   }
-  if(sql.startsWith('SELECT r.slug'))return {rowCount:1,rows:[{slug:'zachary-my-unique-hat-2026-11'}]};
+  if(sql.startsWith('SELECT r.slug')){const rows=fullCatalog?[{slug:'book-one'},{slug:'book-two'},{slug:'book-three'},{slug:'book-four'}]:[{slug:'zachary-my-unique-hat-2026-11'}];return {rowCount:rows.length,rows};}
   if(sql.includes('SELECT CASE WHEN gift_hash=$1 THEN claimed_at'))return row&&(row.gift_hash===p[0]||row.gift2_hash===p[0])?{rowCount:1,rows:[{claimed_at:row.gift_hash===p[0]?row.claimed_at:row.claimed2_at}]}:{rowCount:0,rows:[]};
   if(sql.includes('UPDATE aom_barber_gifts SET')&&sql.includes('claimed2_at')){
    const first=row?.gift_hash===p[0],second=row?.gift2_hash===p[0];
@@ -85,4 +85,17 @@ test('Paid checkout emails exactly two invited recipients and never repeats on r
   if(prev.from===undefined)delete process.env.AOM_FROM_EMAIL;else process.env.AOM_FROM_EMAIL=prev.from;
   globalThis.fetch=prev.fetch;
  }
+});
+
+test('Checkout is blocked while fewer than four approved books exist in each language',async()=>{
+ const f=fixture(false);
+ const r=await request(f,'/barber/checkout');
+ assert.equal(r.res.status,503);
+ assert.match(r.res.body,/No payment has been taken/);
+});
+test('Checkout redirects to existing one-time Stripe payment link only with four shared approved book slugs',async()=>{
+ const f=fixture(true);
+ const r=await request(f,'/barber/checkout');
+ assert.equal(r.res.status,303);
+ assert.equal(r.res.headers.Location,'https://buy.stripe.com/14AdRbcsQ96aeDKe89ffy03');
 });
