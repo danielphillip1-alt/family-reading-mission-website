@@ -2,6 +2,9 @@ import {createHash,createHmac,randomBytes} from 'node:crypto';
 import {sendTransactionalMail,mailConfigured} from './mail.mjs';
 const LINK='plink_1UboGGRuZKBP2B3nzmcAPiQL';
 const langs=new Set(['en','de','pt-PT']);
+const REQUIRED_BUNDLE_SLUGS=['zachary-my-unique-hat-2026-11','zachary-school-that-believed-in-him','emir-boy-who-never-smiles','emir-barbershop-boys-and-salon-girls'];
+const hasFullBundle=arrays=>arrays.every(slugs=>REQUIRED_BUNDLE_SLUGS.every(slug=>slugs.includes(slug)));
+
 const hash=x=>createHash('sha256').update(x).digest('hex');
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const language=s=>s.custom_fields?.find(f=>f.key==='booklanguage')?.dropdown?.value==='de'?'de':s.custom_fields?.find(f=>f.key==='booklanguage')?.dropdown?.value==='pt'?'pt-PT':'en';
@@ -66,12 +69,11 @@ try{
 const path=url.pathname,id=url.searchParams.get('session_id'),gift=url.searchParams.get('gift'),access=url.searchParams.get('access'),slug=url.searchParams.get('slug');
 if(path==='/barber/checkout'&&req.method==='GET'){
   const sets=await Promise.all([...langs].map(l=>titles(pool,new Date(),l)));
-  const adequate=sets.every(arr=>arr.length>=4);
-  const same=adequate&&sets.every(arr=>arr.slice().sort().join('|')===sets[0].slice().sort().join('|'));
+  const same=hasFullBundle(sets);
   if(!same){send(res,503,page('Your four-book gift bundle is being prepared','<p>We are completing the approved digital editions for English, German and Portuguese. To protect buyers, checkout is unavailable until all four books can be delivered in the selected reading language.</p><p>No payment has been taken.</p><p>For help or to request a release notification, email <a href="mailto:brathatfashionhouse@gmail.com">Authors On A Mission</a>.</p>'));return true;}
   res.writeHead(303,{'Location':'https://buy.stripe.com/14AdRbcsQ96aeDKe89ffy03','Cache-Control':'no-store'});res.end();return true;
 }
-if(path==='/barber/catalog-status'&&req.method==='GET'){const now=new Date();const out={};for(const lang of langs)out[lang]=await titles(pool,now,lang);send(res,200,JSON.stringify({publishedBooksByLanguage:out}),'application/json; charset=utf-8');return true;}
+if(path==='/barber/catalog-status'&&req.method==='GET'){const now=new Date();const out={};for(const lang of langs)out[lang]=await titles(pool,now,lang);send(res,200,JSON.stringify({publishedBooksByLanguage:out,requiredBundleSlugs:REQUIRED_BUNDLE_SLUGS,bundleReady:hasFullBundle(Object.values(out))}),'application/json; charset=utf-8');return true;}
 if(path==='/barber/thanks'&&req.method==='GET'){
 const s=await verified(stripe,id);if(!s){send(res,403,page('Payment not verified','Please complete checkout first.'));return true;}
 const at=new Date(s.created*1000),lang=language(s),g=code(id),g2=code(id,2),email=(s.customer_details?.email||s.customer_email||'').toLowerCase();
