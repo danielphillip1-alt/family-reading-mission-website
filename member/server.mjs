@@ -14,6 +14,7 @@ import {importBundleBooks} from './import-bundle-editions.mjs';
 import {importBookThree} from './import-book-three.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
 import {handleBarber} from './barber-gifts.mjs';
+import {handleStorybook,storybookSchema} from './storybook-gifts.mjs';
 import {handleGiftPersonalization} from './gift-personalization.mjs';
 import {testFirstBookDelivery,testTranslatedBooksDelivery} from './delivery-smoke.mjs';
 
@@ -48,6 +49,11 @@ const files = new Map([
 ]);
 
 const startupMigrations = pool ? pool.query(`
+  ${storybookSchema}
+  -- This first organizer QR is a single two-recipient grant.
+  INSERT INTO aom_storybook_sources(source_hash,kind,expires_at)
+    VALUES('9f57ca277a36b8762919853f3cd599da0c0fd9e34660f6b33066f2f2587f7dae','free',now()+interval '30 days')
+    ON CONFLICT DO NOTHING;
   CREATE TABLE IF NOT EXISTS members (
     id uuid PRIMARY KEY,
     email text UNIQUE NOT NULL,
@@ -535,6 +541,7 @@ const server = createServer(async (req, res) => {
       }
     }
     if (!pool) return send(res, 503, page('Member setup pending', '<p>The membership database connection is temporarily unavailable.</p>'));
+    if (await handleStorybook({req,res,url,stripe,pool})) return;
     if (await handleGiftPersonalization({req,res,url,stripe,pool})) return;
     if (await handleBarber({req,res,url,stripe,pool})) return;
     if (await handlePurchaseDelivery({req,res,url,stripe,pool})) return;
