@@ -278,7 +278,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
    if(!configured.active||configured.type!=='one_time'||configured.unit_amount!==2000||configured.currency!=='eur'){
     send(res,503,page('Checkout unavailable',details));return true;
    }
-   const checkout=await stripe.checkout.sessions.create({mode:'payment',line_items:[{price,quantity:1}],payment_method_types:['card'],
+   const checkout=await stripe.checkout.sessions.create({mode:'payment',line_items:[{price,quantity:1}],payment_method_types:['card'],automatic_tax:{enabled:true},billing_address_collection:'required',
     metadata:{aom_product:'storybook-12'},success_url:new URL('/storybook/send?purchase={CHECKOUT_SESSION_ID}',process.env.APP_URL).href,
     cancel_url:new URL('/barber/checkout',process.env.APP_URL).href});
    redirect(res,checkout.url);return true;
