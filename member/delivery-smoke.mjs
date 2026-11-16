@@ -1,5 +1,6 @@
-import {randomUUID} from 'node:crypto';
+import {randomUUID,randomBytes,createHash} from 'node:crypto';
 import {sendTransactionalMail,mailConfigured} from './mail.mjs';
+import {directGiftAccess} from './barber-gifts.mjs';
 
 // Internal one-time production smoke test; never accepts customer-controlled recipients.
 export async function testFirstBookDelivery(pool){
@@ -54,6 +55,7 @@ export async function testFirstBookDelivery(pool){
 
 export async function testTranslatedBooksDelivery(pool){
  if(!pool || !mailConfigured())return;
+ await sendBratHatDownloadTest(pool);
  for(const [language,filename] of [
   ['de','Zachary_My_Unique_Book_One_DE.pdf'],
   ['pt-PT','Zachary_My_Unique_Book_One_PT.pdf']
@@ -89,5 +91,36 @@ export async function testTranslatedBooksDelivery(pool){
    await pool.query(`UPDATE aom_delivery_smoke_tests SET state='failed',updated_at=now() WHERE test_name=$1`,[token]);
    console.error('Translation delivery smoke test FAILED',language,error?.message?.slice(0,120)||'unknown');
   }
+ }
+}
+
+async function sendBratHatDownloadTest(pool){
+ const id='internal-brathat-direct-download-email-2026-11-16';
+ const email='brathatfashionhouse@gmail.com';
+ const gift=randomBytes(32).toString('hex'), access=directGiftAccess(gift);
+ const hash=value=>createHash('sha256').update(value).digest('hex');
+ const row=await pool.query(`
+  INSERT INTO aom_barber_gifts
+   (session_id,purchased_at,buyer_email,buyer_language,gift_hash,
+    sender_name,recipient1_name,claimed_at,recipient_language,access_hash)
+  VALUES($1,now(),$2,'en',$3,'BratHat Fashion House','BratHat Fashion House',now(),'en',$4)
+  ON CONFLICT(session_id) DO NOTHING RETURNING session_id
+ `,[id,email,hash(gift),hash(access)]);
+ if(!row.rowCount)return;
+ const download=new URL('/barber/reader-pdf',process.env.APP_URL);
+ download.search=new URLSearchParams({access,slug:'zachary-my-unique-hat-2026-11'});
+ const invite=new URL('/barber/open',process.env.APP_URL);
+ invite.searchParams.set('gift',gift);
+ try{
+  await sendTransactionalMail({
+   email,subject:'LIVE TEST — Download your book (PDF)',
+   html:'<p>Your English test book is ready.</p>'+
+    '<p><a style="display:inline-block;background:#07513c;color:#fff;padding:12px 18px;border-radius:8px" href="'+download.href.replaceAll('&','&amp;')+'">Download the book (PDF)</a></p>'+
+    '<p>Be sure to download the book so you can read it again anytime.</p>'+
+    '<p>To try what a recipient sees, <a href="'+invite.href+'">open the personalized gift page</a> and tap <strong>Open Your Gift</strong>.</p>'
+  },id);
+  console.log('BratHat direct download test email sent');
+ }catch(error){
+  console.error('BratHat direct download test email failed',error?.message?.slice(0,100));
  }
 }
