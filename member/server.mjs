@@ -31,7 +31,8 @@ const productionMode = process.env.AOM_ENV === 'production';
 if (STRIPE_API_KEY && !(productionMode ? /^(rk|sk)_live_/ : /^(rk|sk)_test_/).test(STRIPE_API_KEY)) {
   throw new Error('Stripe key mode does not match the deployment environment.');
 }
-const pool = DATABASE_URL ? new pg.Pool({ connectionString: DATABASE_URL }) : null;
+const pool = DATABASE_URL ? new pg.Pool({ connectionString: DATABASE_URL, max: 2 }) : null;
+pool?.on('error', error => console.error('Idle database connection closed', error.code ?? error.name));
 const stripe = STRIPE_API_KEY && new Stripe(STRIPE_API_KEY, { maxNetworkRetries: 2, timeout: 8000 });
 const productionCookies = appUrl.protocol === 'https:' ? '; Secure' : '';
 const cookieName = productionCookies ? '__Host-aom-session' : 'aom-session';
