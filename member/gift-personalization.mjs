@@ -1,5 +1,5 @@
 import {createHash,createHmac} from 'node:crypto';
-import {sendCheckoutGiftInvitations} from './barber-gifts.mjs';
+import {directGiftAccess,sendCheckoutGiftInvitations} from './barber-gifts.mjs';
 const SITE='https://theauthorsmission.de';
 const PAYMENT_LINK='plink_1UboGGRuZKBP2B3nzmcAPiQL';
 const hash=s=>createHash('sha256').update(s).digest('hex');
@@ -20,10 +20,10 @@ export async function handleGiftPersonalization({req,res,url,stripe,pool}){
     if(path==='/barber/open'&&req.method==='GET'){
       const token=url.searchParams.get('gift')||'';
       if(!/^[a-f0-9]{64}$/.test(token)){send(res,404,page('Gift link unavailable','<p>This link is not valid.</p>'));return true;}
-      const result=await pool.query('SELECT sender_name,barber_shop_name,recipient1_name,recipient2_name,claimed_at,claimed2_at,gift_hash FROM aom_barber_gifts WHERE gift_hash=$1 OR gift2_hash=$1',[hash(token)]);
+      const result=await pool.query('SELECT sender_name,barber_shop_name,recipient1_name,recipient2_name,claimed_at,claimed2_at,gift_hash,access_hash,access2_hash FROM aom_barber_gifts WHERE gift_hash=$1 OR gift2_hash=$1',[hash(token)]);
       if(!result.rowCount){send(res,404,page('Gift link unavailable','<p>This gift link was not found.</p>'));return true;}
       const row=result.rows[0],first=row.gift_hash===hash(token);
-      if(first?row.claimed_at:row.claimed2_at){send(res,409,page('Gift already claimed','<p>This gift has already been redeemed. Please use your existing private book access link.</p>'));return true;}
+      if((first?row.claimed_at:row.claimed2_at)&&(first?row.access_hash:row.access2_hash)!==hash(directGiftAccess(token))){send(res,409,page('Gift already claimed','<p>This gift has already been redeemed. Please use your existing private book access link.</p>'));return true;}
       const dest=new URL('/gift.html',SITE);
       dest.searchParams.set('gift',token);
       dest.searchParams.set('to',(first?row.recipient1_name:row.recipient2_name)||'Friend');
