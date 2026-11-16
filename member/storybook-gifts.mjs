@@ -1,0 +1,384 @@
+import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {once} from 'node:events';
+import QRCode from 'qrcode';
+import {sendTransactionalMail,mailConfigured} from './mail.mjs';
+import {giftArt} from './gift-shelf-art.mjs';
+import {shelfPage,isBundleBook,bundleTitle} from './gift-shelf.mjs';
+
+const SITE='https://theauthorsmission.de';
+const languages={en:'English','pt-PT':'Português',de:'Deutsch',tr:'Türkçe'};
+const hash=value=>createHash('sha256').update(value).digest('hex');
+const hex=value=>/^[a-f0-9]{64}$/.test(value||'');
+const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const secret=()=>process.env.AOM_BARBER_GIFT_SECRET||process.env.STRIPE_WEBHOOK_SECRET;
+const derive=value=>createHmac('sha256',secret()).update(value).digest('hex');
+const codeFor=claim=>String(parseInt(derive('storybook-code:'+claim).slice(0,12),16)%10000).padStart(4,'0');
+const tokenFor=(source,slot)=>derive('storybook-invite:'+source+':'+slot);
+const headers={'Cache-Control':'no-store, private','Referrer-Policy':'strict-origin','X-Robots-Tag':'noindex, nofollow','X-Content-Type-Options':'nosniff'};
+const options=selected=>Object.entries(languages).map(([key,label])=>'<option value="'+key+'"'+(key===selected?' selected':'')+'>'+label+'</option>').join('');
+const urlFor=(path,params={})=>path+'?'+new URLSearchParams(params);
+const cookieKey=token=>'storybook_'+token.slice(0,16);
+const cookie=(token,value,maxAge)=>cookieKey(token)+'='+value+'; Path=/storybook/; HttpOnly; SameSite=Lax; Max-Age='+maxAge+(new URL(process.env.APP_URL).protocol==='https:'?'; Secure':'');
+const activeCookie=(req,token)=>String(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(cookieKey(token)+'='))?.split('=')[1];
+const equal=(a,b)=>timingSafeEqual(Buffer.from(hash(a)),Buffer.from(hash(b)));
+const giftLink=token=>urlFor('/storybook/gift',{gift:token});
+const bundleSlug='aom-storybook-collection';
+const chunkSize=524288;
+const template=()=>readFile(new URL('./storybook-gift.html',import.meta.url),'utf8');
+const copy={
+ en:['Your gift has already been opened.','Download all 12 books (PDF)','Finish and visit the website','Download your books before you finish. You have one hour to save them.','Open My Gift','Your language','Download code'],
+ de:['Dein Geschenk wurde bereits geöffnet.','Alle 12 Bücher herunterladen (PDF)','Fertig und zur Website','Lade deine Bücher herunter, bevor du fertig bist. Du hast eine Stunde Zeit.','Mein Geschenk öffnen','Deine Sprache','Downloadcode'],
+ 'pt-PT':['O teu presente já foi aberto.','Descarregar os 12 livros (PDF)','Terminar e visitar o site','Descarrega os teus livros antes de terminares. Tens uma hora para os guardar.','Abrir o meu presente','O teu idioma','Código de download'],
+ tr:['Hediyen zaten açıldı.','12 kitabın tümünü indir (PDF)','Bitir ve siteyi ziyaret et','Bitirmeden önce kitaplarını indir. Kaydetmek için bir saatin var.','Hediyemi aç','Dilin','İndirme kodu']
+};
+
+export const storybookSchema=`
+ CREATE TABLE IF NOT EXISTS aom_storybook_sources(
+  source_hash text PRIMARY KEY, kind text NOT NULL, expires_at timestamptz,
+  registered_at timestamptz
+ );
+ CREATE TABLE IF NOT EXISTS aom_storybook_claims(
+  token_hash text PRIMARY KEY, source_hash text NOT NULL REFERENCES aom_storybook_sources,
+  slot int NOT NULL, sender text NOT NULL, recipient text NOT NULL,
+  destination text, channel text, delivery_at timestamptz,
+  attempts int NOT NULL DEFAULT 0, used_at timestamptz, language text,
+  session_hash text, session_expires timestamptz, finished_at timestamptz,
+  UNIQUE(source_hash,slot)
+ );
+ CREATE TABLE IF NOT EXISTS aom_storybook_editions(
+  language text PRIMARY KEY, slugs text[] NOT NULL CHECK(cardinality(slugs)=12)
+ );
+ CREATE TABLE IF NOT EXISTS aom_storybook_files(
+  slug text NOT NULL, language text NOT NULL, size int NOT NULL,
+  sha256 text NOT NULL, approved_at timestamptz, PRIMARY KEY(slug,language)
+ );
+ CREATE TABLE IF NOT EXISTS aom_storybook_pdf_parts(
+  slug text NOT NULL, language text NOT NULL, part int NOT NULL, bytes bytea NOT NULL,
+  PRIMARY KEY(slug,language,part),
+  FOREIGN KEY(slug,language) REFERENCES aom_storybook_files ON DELETE CASCADE
+ );
+`;
+
+function send(res,status,body,type='text/html; charset=utf-8'){
+ res.writeHead(status,{...headers,'Content-Type':type});res.end(body);
+}
+function redirect(res,destination,extra={}){
+ res.writeHead(303,{...headers,...extra,Location:destination});res.end();
+}
+function page(title,body,lang='en'){
+ return '<!doctype html><html lang="'+lang+'"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escape(title)+'</title><style>*{box-sizing:border-box}body{margin:0;background:#063a2b;color:#193527;font:17px/1.5 Georgia,serif}main{max-width:760px;margin:auto;background:#fff2cc;min-height:100vh}img{display:block;width:100%}section{padding:22px clamp(16px,5vw,38px)}h1{color:#8e151b;line-height:1.1;margin-top:0}label{display:block;font-weight:700;margin:10px 0}input:not([type=checkbox]),select{display:block;width:100%;font:inherit;padding:9px;border:1px solid #997036;border-radius:8px}a{color:#075139}.btn,button{display:inline-block;background:#8e151b;color:#fff8dd;border:2px solid #e0ab55;border-radius:30px;padding:10px 15px;font:700 16px Georgia,serif;text-decoration:none;cursor:pointer}fieldset{border:1px solid #b77b2b;margin:12px 0;border-radius:12px}p{overflow-wrap:anywhere}</style><main><img alt="" src="'+giftArt['gift-hero']+'"><section><h1>'+escape(title)+'</h1>'+body+'<p><a href="'+SITE+'">Visit Authors On A Mission</a></p></section></main></html>';
+}
+async function readBody(req,maximum){
+ const parts=[];let length=0;
+ for await(const chunk of req){length+=chunk.length;if(length>maximum)return null;parts.push(chunk);}
+ return Buffer.concat(parts);
+}
+async function form(req){
+ const body=await readBody(req,8192);
+ return body&&new URLSearchParams(body.toString('utf8'));
+}
+function sourceFields(type,key){
+ const input=(label,name,required=false)=>'<label>'+label+'<input name="'+name+'" maxlength="120"'+(required?' required':'')+'></label>';
+ return '<form method="post" action="/storybook/send"><input type="hidden" name="kind" value="'+type+'"><input type="hidden" name="key" value="'+escape(key)+'">'+input('Your name','sender',true)+
+  [1,2].map(n=>'<fieldset><legend>Gift '+n+'</legend>'+input('Recipient name','name'+n)+input('Email address or mobile number with country code','contact'+n)+'</fieldset>').join('')+
+  '<label><input type="checkbox" name="permission" value="yes" required> I have permission to send these gifts.</label><button>Send gifts</button></form>';
+}
+function contacts(f){
+ const sender=f.get('sender')?.trim();
+ if(!sender||sender.length>120||f.get('permission')!=='yes')return null;
+ const recipients=[];
+ for(const slot of [1,2]){
+  const name=f.get('name'+slot)?.trim(), contact=f.get('contact'+slot)?.trim();
+  if(!name&&!contact)continue;
+  if(!name||name.length>120||!contact||contact.length>120)return null;
+  const phone=contact.replace(/[\s()-]/g,'');
+  if(/^\+[1-9]\d{7,14}$/.test(phone))recipients.push({slot,name,contact:phone,channel:'sms'});
+  else if(/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(contact))recipients.push({slot,name,contact:contact.toLowerCase(),channel:'email'});
+  else return null;
+ }
+ return recipients.length?{sender,recipients}:null;
+}
+
+const fileQuery=`
+ SELECT e.private_object_key AS storage_key,e.sha256
+ FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id
+ WHERE r.slug=$1 AND e.language=$2 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()
+ UNION ALL
+ SELECT e.private_object_key,e.sha256
+ FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug
+ WHERE r.slug=$1 AND e.language=$2 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()
+`;
+async function fileFor(pool,slug,lang){
+ const stored=(await pool.query('SELECT size,sha256 FROM aom_storybook_files WHERE slug=$1 AND language=$2 AND approved_at IS NOT NULL',[slug,lang])).rows[0];
+ if(stored)return stored;
+ const q=await pool.query(`SELECT f.storage_key,f.sha256,octet_length(f.pdf_content) AS size
+ FROM (${fileQuery}) edition JOIN aom_book_files f USING(storage_key,sha256)
+ WHERE octet_length(f.pdf_content)>5 LIMIT 1`,[slug,lang]);
+ return q.rows[0];
+}
+async function deliverFile(pool,res,slug,lang,inline){
+ const file=await fileFor(pool,slug,lang);
+ if(!file){send(res,404,'Book unavailable','text/plain');return;}
+ res.writeHead(200,{...headers,'Content-Type':'application/pdf','Content-Length':file.size,
+  'Content-Disposition':(inline?'inline':'attachment')+'; filename="'+slug+'-'+lang+'.pdf"'});
+ for(let offset=1;offset<=file.size&&!res.destroyed;offset+=chunkSize){
+  const row=file.storage_key
+   ?(await pool.query('SELECT substring(pdf_content FROM $3 FOR 524288) AS bytes FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',[file.storage_key,file.sha256,offset])).rows[0]
+   :(await pool.query('SELECT bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 AND part=$3',[slug,lang,(offset-1)/chunkSize])).rows[0];
+  if(!row?.bytes?.length){res.destroy();return;}
+  if(!res.write(row.bytes)&&!res.destroyed)await once(res,'drain',{signal:AbortSignal.timeout(15000)});
+ }
+ res.end();
+}
+async function bundleReady(pool,lang){
+ const row=(await pool.query('SELECT slugs FROM aom_storybook_editions WHERE language=$1',[lang])).rows[0];
+ if(!row)return null;
+ for(const slug of [bundleSlug,...row.slugs])if(!await fileFor(pool,slug,lang))return null;
+ return row.slugs;
+}
+async function uploadPdf(req,res,url,pool){
+ const slug=url.searchParams.get('slug'),lang=url.searchParams.get('language');
+ if((!isBundleBook(slug)&&slug!==bundleSlug)||!Object.hasOwn(languages,lang)){send(res,400,'Invalid book or language','text/plain');return;}
+ const action=url.searchParams.get('action');
+ if(action==='start'){
+  const f=await form(req), size=Number(f?.get('size')), sha=f?.get('sha256');
+  if(!Number.isInteger(size)||size<100||size>300000000||!hex(sha)){send(res,400,'Invalid PDF size or checksum','text/plain');return;}
+  const q=await pool.query('INSERT INTO aom_storybook_files(slug,language,size,sha256) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING slug',[slug,lang,size,sha]);
+  if(!q.rowCount){
+   const row=(await pool.query('SELECT size,sha256 FROM aom_storybook_files WHERE slug=$1 AND language=$2',[slug,lang])).rows[0];
+   if(row?.size!==size||row?.sha256!==sha){send(res,409,'A different edition already uses this slug and language','text/plain');return;}
+  }
+  send(res,200,'PDF upload ready','text/plain');return;
+ }
+ const file=(await pool.query('SELECT size,sha256,approved_at FROM aom_storybook_files WHERE slug=$1 AND language=$2',[slug,lang])).rows[0];
+ if(!file){send(res,404,'Start the upload first','text/plain');return;}
+ if(action==='part'){
+  const part=url.searchParams.get('part');
+  const bytes=await readBody(req,chunkSize);
+  if(!/^\d+$/.test(part||'')||!bytes||bytes.length===0||bytes.length!==Math.min(chunkSize,file.size-Number(part)*chunkSize)){
+   send(res,400,'Invalid chunk index or size','text/plain');return;
+  }
+  await pool.query('INSERT INTO aom_storybook_pdf_parts(slug,language,part,bytes) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[slug,lang,Number(part),bytes]);
+  send(res,200,'Saved PDF chunk','text/plain');return;
+ }
+ if(action==='approve'){
+  if(file.approved_at){send(res,200,'PDF approved','text/plain');return;}
+  const digest=createHash('sha256');
+  for(let offset=0;offset<file.size;offset+=chunkSize){
+   const row=(await pool.query('SELECT bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 AND part=$3',[slug,lang,offset/chunkSize])).rows[0];
+   if(!row||row.bytes.length!==Math.min(chunkSize,file.size-offset)||(!offset&&Buffer.from(row.bytes.subarray(0,5)).toString()!=='%PDF-')){
+    send(res,409,'Incomplete or invalid PDF','text/plain');return;
+   }
+   digest.update(row.bytes);
+  }
+  if(digest.digest('hex')!==file.sha256){send(res,409,'PDF checksum mismatch','text/plain');return;}
+  await pool.query('UPDATE aom_storybook_files SET approved_at=now() WHERE slug=$1 AND language=$2',[slug,lang]);
+  send(res,200,'PDF approved','text/plain');return;
+ }
+ send(res,400,'Invalid upload action','text/plain');
+}
+async function verified(stripe,id){
+ if(!stripe||!/^cs_live_[a-zA-Z0-9]{16,200}$/.test(id||''))return null;
+ let s;
+ try{s=await stripe.checkout.sessions.retrieve(id);}catch(e){if(e?.statusCode===404||e?.statusCode===400)return null;throw e;}
+ return s?.mode==='payment'&&s.livemode&&s.status==='complete'&&s.payment_status==='paid'&&s.amount_total===2000&&s.currency==='eur'&&s.metadata?.aom_product==='storybook-12'?s:null;
+}
+async function sendInvite(row,token){
+ const code=codeFor(token), link=new URL(giftLink(token),process.env.APP_URL).href;
+ const message=row.sender+' sent you a storybook gift! Open '+link+' and enter download code '+code+'.';
+ const key='storybook-'+hash(token);
+ if(row.channel==='email'){
+  if(!mailConfigured())throw Error('Email delivery unavailable');
+  await sendTransactionalMail({email:row.destination,subject:'Your storybook gift',html:'<p>'+escape(row.sender)+' sent you a storybook gift!</p><p><a href="'+escape(link)+'">Open your gift page</a></p><p>Your download code is <strong>'+code+'</strong>.</p>'},key);
+ }else if(row.channel==='sms'){
+  const {AOM_SMS_WEBHOOK_URL:endpoint,AOM_SMS_WEBHOOK_TOKEN:credential}=process.env;
+  if(!endpoint||!credential)throw Error('Text delivery unavailable');
+  const response=await fetch(endpoint,{method:'POST',redirect:'error',signal:AbortSignal.timeout(12000),headers:{Authorization:'Bearer '+credential,'Content-Type':'application/json','Idempotency-Key':key},body:JSON.stringify({to:row.destination,body:message})});
+  if(!response.ok)throw Error('Text provider rejected the invitation');
+ }
+}
+async function register(pool,source,recipientInfo){
+ const client=await pool.connect();
+ try{
+  await client.query('BEGIN');
+  const q=await client.query('SELECT registered_at FROM aom_storybook_sources WHERE source_hash=$1 AND (expires_at IS NULL OR expires_at>now()) FOR UPDATE',[source]);
+  if(!q.rowCount){await client.query('ROLLBACK');return null;}
+  if(!q.rows[0].registered_at){
+   for(const r of recipientInfo.recipients){
+    const token=tokenFor(source,r.slot);
+    await client.query('INSERT INTO aom_storybook_claims(token_hash,source_hash,slot,sender,recipient,channel,destination) VALUES($1,$2,$3,$4,$5,$6,$7)',[hash(token),source,r.slot,recipientInfo.sender,r.name,r.channel,r.contact]);
+   }
+   await client.query('UPDATE aom_storybook_sources SET registered_at=now() WHERE source_hash=$1',[source]);
+  }
+  await client.query('COMMIT');
+ }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
+ const rows=(await pool.query('SELECT * FROM aom_storybook_claims WHERE source_hash=$1 AND slot>0 ORDER BY slot',[source])).rows;
+ return rows;
+}
+async function purchase(pool,session,requireDelivery=false){
+ const source=hash('paid:'+session.id), token=tokenFor(source,0);
+ await pool.query("INSERT INTO aom_storybook_sources(source_hash,kind) VALUES($1,'paid') ON CONFLICT DO NOTHING",[source]);
+ await pool.query("INSERT INTO aom_storybook_claims(token_hash,source_hash,slot,sender,recipient,channel,destination) VALUES($1,$2,0,'Authors On A Mission','Friend','email',$3) ON CONFLICT DO NOTHING",[hash(token),source,session.customer_details?.email||session.customer_email||null]);
+ const row=(await pool.query('SELECT * FROM aom_storybook_claims WHERE token_hash=$1',[hash(token)])).rows[0];
+ if(row?.destination&&!row.delivery_at){
+  try{await sendInvite(row,token);await pool.query('UPDATE aom_storybook_claims SET delivery_at=now() WHERE token_hash=$1',[hash(token)]);}
+  catch(error){if(requireDelivery)throw error;console.error('Storybook receipt delivery failed',error.name);}
+ }
+ return token;
+}
+export async function deliverStorybookPurchase(pool,session){
+ if(!pool||!secret()||!session?.livemode||session.mode!=='payment'||session.status!=='complete'||session.payment_status!=='paid'||session.amount_total!==2000||session.currency!=='eur'||session.metadata?.aom_product!=='storybook-12')return;
+ await purchase(pool,session,true);
+}
+function inviteCard(token,name){
+ return '<fieldset><legend>'+escape(name)+'</legend><a class="btn" href="'+escape(giftLink(token))+'">Open gift page</a><p>Download code: <strong>'+codeFor(token)+'</strong></p></fieldset>';
+}
+
+export async function handleStorybook({req,res,url,pool,stripe}){
+ const path=url.pathname,method=req.method;
+ if(!path.startsWith('/storybook/')&&!path.startsWith('/api/admin/storybook/')&&path!=='/barber/checkout')return false;
+ if(!pool||!secret()){send(res,503,page('Storybook gifts are unavailable','<p>Please try again later.</p>'));return true;}
+ try{
+  if(path==='/storybook/issue'&&method==='GET'){
+   const body='<p>Create a free QR for up to two recipients.</p><form id="issue"><label>Organizer key<input id="key" type="password" required autocomplete="off"></label><button>Create gift QR</button></form><p role="status" id="result"></p><script>document.querySelector("#issue").addEventListener("submit",async event=>{event.preventDefault();const key=document.querySelector("#key"),result=document.querySelector("#result");try{const response=await fetch("/api/admin/storybook/issue",{method:"POST",headers:{Authorization:"Bearer "+key.value}});key.value="";if(!response.ok)throw Error();const gift=await response.json();const picture=new Image();picture.src=gift.qr;picture.alt="Free gift QR code";picture.style.width="230px";const link=document.createElement("a");link.href=gift.url;link.textContent="Open or copy the free gifting link";result.replaceChildren(picture,link);}catch{result.textContent="The QR could not be created. Check your organizer key.";}});</script>';
+   send(res,200,page('Create a free gift QR',body));return true;
+  }
+  if(path.startsWith('/api/admin/storybook/')&&method==='POST'){
+   const token=process.env.AOM_ADMIN_API_TOKEN;
+   if(!token||!equal(req.headers.authorization||'','Bearer '+token)){send(res,403,'Forbidden','text/plain');return true;}
+   if(path==='/api/admin/storybook/pdf'){await uploadPdf(req,res,url,pool);return true;}
+   const data=await form(req);
+   if(path==='/api/admin/storybook/issue'){
+    const key=randomBytes(32).toString('hex');
+    await pool.query("INSERT INTO aom_storybook_sources(source_hash,kind,expires_at) VALUES($1,'free',now()+interval '30 days')",[hash('free:'+key)]);
+    const giftUrl=new URL(urlFor('/storybook/send',{free:key}),process.env.APP_URL).href;
+    send(res,201,JSON.stringify({url:giftUrl,qr:await QRCode.toDataURL(giftUrl,{width:320}),recipientLimit:2,expiresInDays:30}),'application/json');return true;
+   }
+   if(path==='/api/admin/storybook/edition'){
+    const lang=data?.get('language'),slugs=data?.getAll('slug')||[];
+    if(!Object.hasOwn(languages,lang)||slugs.length!==12||new Set(slugs).size!==12||!slugs.every(isBundleBook)){
+     send(res,400,'Choose a language and 12 unique book slugs in reading order.','text/plain');return true;
+    }
+    for(const slug of [bundleSlug,...slugs])if(!await fileFor(pool,slug,lang)){send(res,409,'Missing approved PDF: '+slug,'text/plain');return true;}
+    const other=(await pool.query('SELECT slugs FROM aom_storybook_editions WHERE language<>$1 LIMIT 1',[lang])).rows[0];
+    if(other&&JSON.stringify(other.slugs)!==JSON.stringify(slugs)){send(res,409,'All languages must use the same 12 books in the same order.','text/plain');return true;}
+    await pool.query('INSERT INTO aom_storybook_editions(language,slugs) VALUES($1,$2) ON CONFLICT(language) DO UPDATE SET slugs=EXCLUDED.slugs',[lang,slugs]);
+    send(res,200,'Edition registered','text/plain');return true;
+   }
+  }
+  if(path==='/barber/checkout'&&(method==='GET'||method==='POST')){
+   const price=process.env.AOM_STORYBOOK_PRICE_ID;
+   let ready=Boolean(stripe&&price);
+   if(ready)for(const lang of Object.keys(languages))if(!await bundleReady(pool,lang)){ready=false;break;}
+   const details='<p>12 digital books for €20, plus two free gifts with the full collection.</p>';
+   if(!ready){send(res,503,page('Your storybook bundle',details+'<p>Checkout opens when the complete collection is ready.</p>'));return true;}
+   if(method==='GET'){send(res,200,page('Your storybook bundle',details+'<form method="post"><button>Continue to secure checkout</button></form>'));return true;}
+   const configured=await stripe.prices.retrieve(price);
+   if(!configured.active||configured.type!=='one_time'||configured.unit_amount!==2000||configured.currency!=='eur'){
+    send(res,503,page('Checkout unavailable',details));return true;
+   }
+   const checkout=await stripe.checkout.sessions.create({mode:'payment',line_items:[{price,quantity:1}],payment_method_types:['card'],
+    metadata:{aom_product:'storybook-12'},success_url:new URL('/storybook/send?purchase={CHECKOUT_SESSION_ID}',process.env.APP_URL).href,
+    cancel_url:new URL('/barber/checkout',process.env.APP_URL).href});
+   redirect(res,checkout.url);return true;
+  }
+  if(path==='/storybook/send'&&(method==='GET'||method==='POST')){
+   const data=method==='POST'?await form(req):null;
+   const kind=method==='GET'?(url.searchParams.has('purchase')?'paid':'free'):data?.get('kind');
+   const key=method==='GET'?url.searchParams.get(kind==='paid'?'purchase':'free'):data?.get('key');
+   const session=kind==='paid'?await verified(stripe,key):null;
+   if((kind==='free'&&!hex(key))||(kind==='paid'&&!session)||!['free','paid'].includes(kind)){
+    send(res,403,page('Open your private gifting link','<p>Scan a free gift QR or use the link from your purchase.</p>'));return true;
+   }
+   const source=hash(kind+':'+key);
+   if(session)await purchase(pool,session);
+   if(!(await pool.query('SELECT 1 FROM aom_storybook_sources WHERE source_hash=$1 AND (expires_at IS NULL OR expires_at>now())',[source])).rowCount){
+    send(res,404,page('This gifting link is unavailable','<p>Ask the gift organizer for a new link.</p>'));return true;
+   }
+   if(method==='GET'){
+    send(res,200,page('Send a storybook gift',(session?inviteCard(tokenFor(source,0),'Your books'):'')+sourceFields(kind,key)));return true;
+   }
+   const info=data&&contacts(data);
+   if(!info){send(res,400,page('Check the gift details',sourceFields(kind,key)));return true;}
+   const rows=await register(pool,source,info);
+   if(!rows){send(res,409,page('This gifting link has expired',''));return true;}
+   let result='';
+   for(const row of rows){
+    const token=tokenFor(source,row.slot);let sent=Boolean(row.delivery_at);
+    if(!sent)try{await sendInvite(row,token);await pool.query('UPDATE aom_storybook_claims SET delivery_at=now() WHERE token_hash=$1',[hash(token)]);sent=true;}
+    catch(error){console.error('Storybook invitation delivery failed',error.name);}
+    result+=inviteCard(token,row.recipient)+(sent?'<p>Invitation sent.</p>':'<p>Automatic delivery needs a retry. You can share the private link and code yourself now.</p>');
+    if(!sent&&row.channel==='sms'){
+     const link=new URL(giftLink(token),process.env.APP_URL).href;
+     result+='<p><a class="btn" href="'+escape('sms:'+row.destination+'?body='+encodeURIComponent('Open your storybook gift: '+link+' Download code: '+codeFor(token)))+'">Open text message</a></p>';
+    }
+   }
+   send(res,200,page('Your storybook gifts',result));return true;
+  }
+  const data=method==='POST'?await form(req):null;
+  const gift=method==='POST'?data?.get('gift'):url.searchParams.get('gift');
+  if(!hex(gift)){send(res,404,page('Gift link unavailable','<p>Open the private link from your gift message.</p>'));return true;}
+  const key=hash(gift);
+  const row=(await pool.query('SELECT * FROM aom_storybook_claims WHERE token_hash=$1',[key])).rows[0];
+  if(!row){send(res,404,page('Gift link unavailable','<p>Open the private link from your gift message.</p>'));return true;}
+  if(path==='/storybook/gift'&&method==='GET'){
+   const selected=url.searchParams.get('language');
+   const lang=row.language||(Object.hasOwn(languages,selected)?selected:'en');
+   const labels=copy[lang];
+   const formHtml=row.used_at?'<p>'+labels[0]+'</p><a class="open" href="'+SITE+'">Visit the website</a>':
+    '<form action="/storybook/open" method="post"><input type="hidden" name="gift" value="'+gift+'"><label id="languageLabel" for="language">'+labels[5]+'</label><select id="language" name="language">'+options(lang)+'</select><label id="codeLabel" for="code">'+labels[6]+'</label><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{4}" maxlength="4" required><button class="open" id="open">'+labels[4]+'</button></form>';
+   const notice={wrong:'That code did not match. Check your gift message.',locked:'Too many attempts. Ask the gift organizer for help.',edition:'This language edition is still being prepared. Your code is ready to use later.'}[url.searchParams.get('notice')]||'';
+   const html=(await template()).replace('<html lang="en">','<html lang="'+lang+'">').replace('%%RECIPIENT%%',()=>escape(row.recipient)).replace('%%SENDER%%',()=>escape(row.sender))
+    .replace('%%NOTICE%%',()=>notice?'<p role="status">'+notice+'</p>':'').replace('%%FORM%%',()=>formHtml);
+   send(res,200,html);return true;
+  }
+  if(path==='/storybook/open'&&method==='POST'){
+   if(row.used_at){redirect(res,giftLink(gift));return true;}
+   if(row.attempts>=8){redirect(res,urlFor('/storybook/gift',{gift,notice:'locked'}));return true;}
+   const pin=data?.get('code')||'', lang=data?.get('language');
+   if(!/^\d{4}$/.test(pin)||!equal(codeFor(gift),pin)){
+    await pool.query('UPDATE aom_storybook_claims SET attempts=attempts+1 WHERE token_hash=$1 AND used_at IS NULL AND attempts<8',[key]);
+    redirect(res,urlFor('/storybook/gift',{gift,notice:'wrong',language:lang||'en'}));return true;
+   }
+   if(!Object.hasOwn(languages,lang)||!await bundleReady(pool,lang)){
+    redirect(res,urlFor('/storybook/gift',{gift,notice:'edition',language:lang||'en'}));return true;
+   }
+   const session=randomBytes(32).toString('hex');
+   const q=await pool.query("UPDATE aom_storybook_claims SET used_at=now(),language=$2,session_hash=$3,session_expires=now()+interval '1 hour' WHERE token_hash=$1 AND used_at IS NULL AND attempts<8 RETURNING token_hash",[key,lang,hash(session)]);
+   if(!q.rowCount){redirect(res,giftLink(gift));return true;}
+   redirect(res,urlFor('/storybook/shelf',{gift}),{'Set-Cookie':cookie(gift,session,3600)});return true;
+  }
+  const session=activeCookie(req,gift);
+  if(!hex(session)||!row.session_hash||!equal(hash(session),row.session_hash)||row.finished_at||new Date(row.session_expires)<=new Date()){
+   if(path==='/storybook/pdf'){send(res,403,'Download session closed','text/plain');return true;}
+   redirect(res,giftLink(gift));return true;
+  }
+  const lang=row.language,labels=copy[lang];
+  if(path==='/storybook/finish'&&method==='POST'){
+   await pool.query('UPDATE aom_storybook_claims SET finished_at=now(),session_hash=NULL WHERE token_hash=$1 AND session_hash=$2',[key,hash(session)]);
+   redirect(res,SITE,{'Set-Cookie':cookie(gift,'',0)});return true;
+  }
+  const slugs=(await pool.query('SELECT slugs FROM aom_storybook_editions WHERE language=$1',[lang])).rows[0]?.slugs||[];
+  const slug=url.searchParams.get('slug');
+  if(method==='GET'&&path==='/storybook/pdf'&&(slugs.includes(slug)||(slug===bundleSlug&&slugs.length===12))){
+   await deliverFile(pool,res,slug,lang,slug!==bundleSlug&&url.searchParams.get('inline')==='1');return true;
+  }
+  if(method==='GET'&&path==='/storybook/read'&&slugs.includes(slug)){
+   const inline=urlFor('/storybook/pdf',{gift,slug,inline:'1'});
+   const title=bundleTitle(slug,lang);
+   send(res,200,page(title,'<p><a class="btn" href="'+escape(urlFor('/storybook/shelf',{gift}))+'">‹ '+escape(languages[lang])+'</a></p><iframe style="width:100%;height:75vh;border:0" title="'+escape(title)+'" src="'+escape(inline)+'"></iframe><p><a href="'+escape(inline)+'">Open PDF</a></p>',lang));return true;
+  }
+  if(path==='/storybook/shelf'&&method==='GET'){
+   const actions='<div style="background:#fff2cc;text-align:center;padding:12px"><strong>'+labels[3]+'</strong><p><a class="button" href="'+escape(urlFor('/storybook/pdf',{gift,slug:bundleSlug}))+'">'+labels[1]+'</a></p><form method="post" action="/storybook/finish"><input type="hidden" name="gift" value="'+gift+'"><button class="button secondary">'+labels[2]+'</button></form></div>';
+   const html=shelfPage({lang,available:slugs,otherEditions:[],order:slugs,link:(view,book)=>urlFor(view==='reader'?'/storybook/read':'/storybook/pdf',{gift,slug:book})})
+    .replace('content="no-referrer"','content="strict-origin"').replace('<ul class="books">',()=>actions+'<ul class="books">');
+   send(res,200,html);return true;
+  }
+  send(res,404,page('Book unavailable',''));return true;
+ }catch(error){
+  console.error('Storybook request failed',error.code||error.name);
+  if(res.headersSent)res.destroy();else send(res,503,page('Please try again','<p>The storybook service is temporarily unavailable.</p>'));
+  return true;
+ }
+}
