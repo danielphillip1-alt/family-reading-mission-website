@@ -13,8 +13,9 @@ export async function importStagedEditions(pool){
  if(editions.every(e=>rows.rows.some(row=>row.slug===e.slug && row.language===e.lang && row.sha256===e.sha)))return {alreadyPresent:true,editions:editions.length};
  const staged=[];
  for(const item of editions){
-   const encoded=await readFile(new URL('./secure-editions/'+item.path,import.meta.url),'utf8');
-   const all=Buffer.from(encoded.trim(),'base64');
+   const raw=await readFile(new URL('./secure-editions/'+item.path,import.meta.url));
+   const content=raw.toString('ascii');
+   const all=content.startsWith('AAAA') && /^[A-Za-z0-9+/=\\r\\n]+$/.test(content.trim()) ? Buffer.from(content.trim(),'base64') : raw;
    if(all.length<120||all.length>12582912+16)throw Error('Invalid encrypted PDF size for '+item.lang);
    const iv=all.subarray(0,16);
    const decipher=createDecipheriv('chacha20',Buffer.from(keyHex,'hex'),iv);
