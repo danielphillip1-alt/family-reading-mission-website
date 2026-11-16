@@ -9,6 +9,7 @@ import { handleBooks, processDueDeliveries } from './book-delivery.mjs';
 import {mailConfigured} from './mail.mjs';
 import {handleLegalRequest} from './legal-requests.mjs';
 import {importApprovedBookOne} from './import-approved-books.mjs';
+import {importBundleBooks} from './import-bundle-editions.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
 import {handleBarber} from './barber-gifts.mjs';
 import {handleGiftPersonalization} from './gift-personalization.mjs';
@@ -660,6 +661,8 @@ setTimeout(deliverDueBooks, 5_000).unref();
 startupMigrations.then(async()=>{
  if(!schemaReady)return;
  try{
+  const bundleImport=await importBundleBooks(pool);
+  if(bundleImport.imported) console.log('Private bundle book editions imported:',bundleImport.count);
   const result=await importApprovedBookOne(pool);
   if(result.imported){console.log('Approved customer Book One PDFs imported:',result.editions.join(','));await deliverDueBooks();}
   await testFirstBookDelivery(pool);
