@@ -5,9 +5,9 @@ const editions=[
   {slug:'zachary-school-that-believed-in-him',lang:'en',file:'book2-en',sha:'203032c3881d380e518211542ba6971e830323dfd881d943c2b27b485c266ce4',parts:0},
   {slug:'zachary-school-that-believed-in-him',lang:'de',file:'book2-de',sha:'9daeb243afa71783c039c93d41992b614a5198664767800ec961c1efb8bda5a5',parts:0},
   {slug:'zachary-school-that-believed-in-him',lang:'pt-PT',file:'book2-pt',sha:'246768ac79e235843cb13ca62d7675696637df12eac87704282556bd9796c221',parts:0},
-  {slug:'zachary-school-that-made-room',lang:'en',file:'book3-en',sha:'58df00cbd62928c9ea5149c7f34c9fbf30bf3b6dfed7c289540f2aca0aed0bbe',parts:7,published:false},
-  {slug:'zachary-school-that-made-room',lang:'de',file:'book3-de',sha:'e67ea9a5b8b3927919eb1444b24cd98654070aa8f7e16bf4bd109384426ff6b2',parts:7,published:false},
-  {slug:'zachary-school-that-made-room',lang:'pt-PT',file:'book3-pt',sha:'d08d6f9d3c94d907729523ef3b75dd61d12a1a0f413fa9b43f173683490a8d21',parts:7,published:false},
+  {slug:'zachary-school-that-made-room',lang:'en',file:'book3-en',sha:'58df00cbd62928c9ea5149c7f34c9fbf30bf3b6dfed7c289540f2aca0aed0bbe',parts:7,published:true},
+  {slug:'zachary-school-that-made-room',lang:'de',file:'book3-de',sha:'e67ea9a5b8b3927919eb1444b24cd98654070aa8f7e16bf4bd109384426ff6b2',parts:7,published:true},
+  {slug:'zachary-school-that-made-room',lang:'pt-PT',file:'book3-pt',sha:'d08d6f9d3c94d907729523ef3b75dd61d12a1a0f413fa9b43f173683490a8d21',parts:7,published:true},
   {slug:'emir-boy-who-never-smiles',lang:'en',file:'emir1-en',sha:'a77e8987e695034c5521a8658311aeff9bb5b4e1c8941a35c90075f08c430cc1',parts:3},
   {slug:'emir-barbershop-boys-and-salon-girls',lang:'en',file:'emir2-en',sha:'b8a7758c401a62c209caed51793abd72203e0a4180c48d072962e0fb6babb9fb',parts:7}
 ];
