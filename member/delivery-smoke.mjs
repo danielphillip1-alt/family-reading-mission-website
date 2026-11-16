@@ -1,4 +1,4 @@
-import {randomUUID,randomBytes,createHash} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
 import {sendTransactionalMail,mailConfigured} from './mail.mjs';
 
 // Internal one-time production smoke test; never accepts customer-controlled recipients.
@@ -54,7 +54,6 @@ export async function testFirstBookDelivery(pool){
 
 export async function testTranslatedBooksDelivery(pool){
  if(!pool || !mailConfigured())return;
- await testBratHatGift(pool);
  for(const [language,filename] of [
   ['de','Zachary_My_Unique_Book_One_DE.pdf'],
   ['pt-PT','Zachary_My_Unique_Book_One_PT.pdf']
@@ -90,36 +89,5 @@ export async function testTranslatedBooksDelivery(pool){
    await pool.query(`UPDATE aom_delivery_smoke_tests SET state='failed',updated_at=now() WHERE test_name=$1`,[token]);
    console.error('Translation delivery smoke test FAILED',language,error?.message?.slice(0,120)||'unknown');
   }
- }
-}
-
-async function testBratHatGift(pool){
- const testId='internal-brathat-browser-gift-smoke-2026-11-16';
- const email='brathatfashionhouse@gmail.com';
- const name='BratHat Fashion House';
- const token=randomBytes(32).toString('hex');
- const tokenHash=createHash('sha256').update(token).digest('hex');
- const result=await pool.query(`
-   INSERT INTO aom_barber_gifts
-     (session_id,purchased_at,buyer_email,buyer_language,gift_hash,
-      sender_name,recipient1_name,recipient_email)
-   VALUES ($1,now(),$2,'en',$3,$4,$4,$2)
-   ON CONFLICT(session_id) DO NOTHING
-   RETURNING session_id`,[testId,email,tokenHash,name]);
- if(!result.rowCount)return;
- try{
-  const link=new URL('/barber/open',process.env.APP_URL);
-  link.searchParams.set('gift',token);
-  await sendTransactionalMail({
-   email,
-   subject:'BratHat browser gift test — Authors On A Mission',
-   html:'<p>BratHat Fashion House sent you a digital book gift!</p>'+
-      '<p>This is an internal test gift. No purchase or charge occurred.</p>'+
-      '<p><a href="'+link.href+'">Open your gift</a></p>'
-  },testId);
-  await pool.query('UPDATE aom_barber_gifts SET gift1_invited_at=now() WHERE session_id=$1',[testId]);
-  console.log('BratHat gift smoke invitation sent');
- }catch(error){
-  console.error('BratHat gift smoke invitation failed',error?.name);
  }
 }
