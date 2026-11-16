@@ -44,7 +44,8 @@ export function shelfPage({lang,available,otherEditions,link}){
  const slugs=[...new Set([...bundleBooks.map(b=>b[0]),...available,...otherEditions])].filter(slug=>available.includes(slug)||otherEditions.includes(slug));
  const cards=slugs.map(slug=>{
   const title=escape(bundleTitle(slug,lang));
-  const cover=giftArt[slug]?'<img src="'+giftArt[slug]+'" alt="">':'<span class="placeholder">'+title+'</span>';
+  const art=giftArt[lang+':'+slug]||giftArt[slug];
+  const cover=art?'<img src="'+art+'" alt="">':'<span class="placeholder">'+title+'</span>';
   const actions=available.includes(slug)?'<a class="button" href="'+escape(link('reader',slug))+'" aria-label="'+escape(w.read+' – '+bundleTitle(slug,lang))+'">'+w.read+'</a> <a class="button secondary" href="'+escape(link('reader-pdf',slug))+'" aria-label="'+escape(w.download+' – '+bundleTitle(slug,lang))+'">'+w.download+'</a>':'<span>'+w.missing+'</span>';
   return '<li class="book"><div class="cover">'+cover+'</div><h2>'+title+'</h2><div class="actions">'+actions+'</div></li>';
  }).join('');
