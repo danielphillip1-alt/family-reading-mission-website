@@ -10,10 +10,11 @@ export const bundleBooks = [
 export const isBundleBook = slug => /^(zachary|emir)-[a-z0-9-]{2,70}$/.test(slug||'');
 export const bundleTitle = (slug,lang) => {
  const row=bundleBooks.find(book=>book[0]===slug);
- return row?.[{en:1,de:2,'pt-PT':3}[lang]]||row?.[1]||slug.replaceAll('-',' ').replace(/\b\w/g,c=>c.toUpperCase());
+ return row?.[{en:1,de:2,'pt-PT':3,tr:4}[lang]]||row?.[1]||slug.replaceAll('-',' ').replace(/\b\w/g,c=>c.toUpperCase());
 };
 const escape = value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const words={
+ tr:{title:'Hikâye kitabı hediyen!',intro:'Zachary ve Emir’in maceraları tek bir hediyede. Okumaya başlamak için bir kitap seç!',read:'Kitabı aç',download:'PDF indir',save:'Kitaplarını tekrar okuyabilmek için indirmeyi unutma.',missing:'Bu dilde henüz mevcut değil'},
  en:{title:'Your storybook gift!',intro:'Zachary and Emir’s adventures, together in one gift. Pick a book to start reading!',read:'Open book',download:'Download PDF',save:'Be sure to download your books so you can read them again anytime.',missing:'Not yet available in this language'},
  de:{title:'Dein Büchergeschenk!',intro:'Die Abenteuer von Zachary und Emir in einem Geschenk. Such dir ein Buch aus und lies los!',read:'Buch öffnen',download:'PDF herunterladen',save:'Lade deine Bücher herunter, damit du sie jederzeit wieder lesen kannst.',missing:'In dieser Sprache noch nicht verfügbar'},
  'pt-PT':{title:'O teu presente de livros!',intro:'As aventuras de Zachary e Emir num só presente. Escolhe um livro e começa a ler!',read:'Abrir livro',download:'Descarregar PDF',save:'Descarrega os teus livros para os poderes ler novamente sempre que quiseres.',missing:'Ainda indisponível neste idioma'}
@@ -39,9 +40,9 @@ h2{font-size:1.22rem;line-height:1.18;min-height:2.36em;margin:13px 0;display:gr
 footer{text-align:center;background:var(--forest);color:#ffe59d;padding:17px;font-weight:bold}
 @media(max-width:560px){.books{grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.book{padding:8px}.intro{padding:15px 12px}h2{font-size:1rem}.button{font-size:.83rem;padding:6px 9px}.cover{aspect-ratio:1/1.12}}
 `;
-export function shelfPage({lang,available,otherEditions,link}){
+export function shelfPage({lang,available,otherEditions,link,order}){
  const w=words[lang];
- const slugs=[...new Set([...bundleBooks.map(b=>b[0]),...available,...otherEditions])].filter(slug=>available.includes(slug)||otherEditions.includes(slug));
+ const slugs=order||[...new Set([...bundleBooks.map(b=>b[0]),...available,...otherEditions])].filter(slug=>available.includes(slug)||otherEditions.includes(slug));
  const cards=slugs.map(slug=>{
   const title=escape(bundleTitle(slug,lang));
   const art=giftArt[lang+':'+slug]||giftArt[slug];
