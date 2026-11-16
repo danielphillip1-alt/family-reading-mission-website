@@ -37,7 +37,11 @@ export async function importBundleBooks(pool){
  // Validate all present editions; do not expose incomplete files.
  const verified=[],missing=[];
  for(const edition of editions){
-   try { verified.push({...edition,pdf:await decrypt(edition,key)}); }
+   const needsSecondKey=edition.slug==='zachary-school-that-made-room' && edition.lang!=='en';
+   const extraHex=process.env.AOM_EDITION_DECRYPT_KEY||'';
+   if(needsSecondKey && !/^[a-f0-9]{64}$/i.test(extraHex))throw Error('Missing Book Three private edition key');
+   const editionKey=needsSecondKey?Buffer.from(extraHex,'hex'):key;
+   try { verified.push({...edition,pdf:await decrypt(edition,editionKey)}); }
    catch(err){
      if(err?.code==='ENOENT' || String(err?.message).startsWith('Missing private PDF data')){
        missing.push(edition.file);continue;
