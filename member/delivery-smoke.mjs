@@ -94,7 +94,7 @@ export async function testTranslatedBooksDelivery(pool){
 }
 
 async function testBratHatGift(pool){
- const testId='internal-brathat-gift-smoke-2026-11-16';
+ const testId='internal-brathat-browser-gift-smoke-2026-11-16';
  const email='brathatfashionhouse@gmail.com';
  const name='BratHat Fashion House';
  const token=randomBytes(32).toString('hex');
@@ -112,7 +112,7 @@ async function testBratHatGift(pool){
   link.searchParams.set('gift',token);
   await sendTransactionalMail({
    email,
-   subject:'BratHat gift redemption test — Authors On A Mission',
+   subject:'BratHat browser gift test — Authors On A Mission',
    html:'<p>BratHat Fashion House sent you a digital book gift!</p>'+
       '<p>This is an internal test gift. No purchase or charge occurred.</p>'+
       '<p><a href="'+link.href+'">Open your gift</a></p>'
