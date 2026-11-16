@@ -11,6 +11,7 @@ import {handleLegalRequest} from './legal-requests.mjs';
 import {importApprovedBookOne} from './import-approved-books.mjs';
 
 import {importBundleBooks} from './import-bundle-editions.mjs';
+import {importBookThree} from './import-book-three.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
 import {handleBarber} from './barber-gifts.mjs';
 import {handleGiftPersonalization} from './gift-personalization.mjs';
@@ -664,6 +665,8 @@ startupMigrations.then(async()=>{
  try{
   const bundleImport=await importBundleBooks(pool);
   if(bundleImport.imported) console.log('Private bundle book editions imported:',bundleImport.count);
+  const thirdBook=await importBookThree(pool);
+  console.log('Zachary Book Three protected import:',JSON.stringify(thirdBook));
   const result=await importApprovedBookOne(pool);
   if(result.imported){console.log('Approved customer Book One PDFs imported:',result.editions.join(','));await deliverDueBooks();}
   await testFirstBookDelivery(pool);
