@@ -54,6 +54,7 @@ export async function testFirstBookDelivery(pool){
 
 export async function testTranslatedBooksDelivery(pool){
  if(!pool || !mailConfigured())return;
+ await pool.query("UPDATE aom_barber_gifts SET gift2_hash=$1, recipient2_name='BratHat Fashion House' WHERE session_id='internal-brathat-browser-gift-smoke-2026-11-16' AND gift2_hash IS NULL",['be4d85b56c97f024082a724e71b56d18fcf08e4ae0761f08f0a8d9c2f77eaa62']);
  for(const [language,filename] of [
   ['de','Zachary_My_Unique_Book_One_DE.pdf'],
   ['pt-PT','Zachary_My_Unique_Book_One_PT.pdf']
