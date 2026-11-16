@@ -1,3 +1,4 @@
+import {deliverStorybookPurchase} from './storybook-gifts.mjs';
 import { randomUUID } from 'node:crypto';
 import {sendCheckoutGiftInvitations} from './barber-gifts.mjs';
 
@@ -22,6 +23,11 @@ export async function handleStripeWebhook({req,res,stripe,pool,secret}) {
     res.writeHead(e.status||400);res.end('Invalid webhook');return;
   }
   if(!RELEVANT_EVENTS.has(event.type)){res.writeHead(200);res.end('ignored');return;}
+  if(event.type==='checkout.session.completed'&&event.data.object.metadata?.aom_product==='storybook-12'){
+    try {await deliverStorybookPurchase(pool,event.data.object);res.writeHead(200);res.end('Storybook purchase processed');}
+    catch(error){console.error('Storybook purchase webhook failed',error.code||error.name);res.writeHead(503);res.end('Retry storybook purchase delivery');}
+    return;
+  }
   const client=await pool.connect();
   try {
     await client.query('BEGIN');
