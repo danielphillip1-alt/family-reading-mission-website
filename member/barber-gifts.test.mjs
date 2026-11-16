@@ -65,11 +65,13 @@ test('Two gift links open independent readers, retain the chosen language and al
  assert.equal(new Set(tokens).size,2);
  for(const [i,token] of [...new Set(tokens)].entries()){
   const view=await request(f,'/barber/redeem?gift='+token+'&language='+(i?'pt-PT':'en'));assert.equal(view.res.status,303);
-  assert.match(view.res.headers.Location,/^\/barber\/reader\?access=/);
-  const read=await request(f,view.res.headers.Location);assert.equal(read.res.status,200);
+  assert.match(view.res.headers.Location,/^\/barber\/books\?access=/);
+  const shelf=await request(f,view.res.headers.Location);assert.equal(shelf.res.status,200);
+  assert.match(shelf.res.body,i?/O teu presente de livros/:/Your storybook gift/);
+  const read=await request(f,view.res.headers.Location.replace('/books?','/reader?'));assert.equal(read.res.status,200);
   assert.match(read.res.body, /<iframe/);
   assert.match(read.res.body, i?/Descarregar o livro/:/Be sure to download the book/);
-  const path=view.res.headers.Location.replace('/reader?','/reader-pdf?')+'&slug=zachary-my-unique-hat-2026-11';
+  const path=view.res.headers.Location.replace('/books?','/reader-pdf?')+'&slug=zachary-my-unique-hat-2026-11';
   const inline=await request(f,path+'&inline=1');
   assert.match(inline.res.headers['Content-Disposition'],/^inline;/);
   const download=await request(f,path);
