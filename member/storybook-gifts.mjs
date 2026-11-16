@@ -24,6 +24,7 @@ const activeCookie=(req,token)=>String(req.headers.cookie||'').split(';').map(x=
 const equal=(a,b)=>timingSafeEqual(Buffer.from(hash(a)),Buffer.from(hash(b)));
 const giftLink=token=>urlFor('/storybook/gift',{gift:token});
 const bundleSlug='aom-storybook-collection';
+const displayName=(name,fallback)=>{const label=String(name||'').trim();return label&&!label.includes('@')?label.slice(0,40):fallback;};
 const chunkSize=524288;
 const template=()=>readFile(new URL('./storybook-gift.html',import.meta.url),'utf8');
 const copy={
@@ -80,18 +81,18 @@ async function form(req){
 }
 function sourceFields(type,key){
  const input=(label,name,required=false)=>'<label>'+label+'<input name="'+name+'" maxlength="120"'+(required?' required':'')+'></label>';
- return '<form method="post" action="/storybook/send"><input type="hidden" name="kind" value="'+type+'"><input type="hidden" name="key" value="'+escape(key)+'">'+input('Your name','sender',true)+
+ return '<form method="post" action="/storybook/send"><input type="hidden" name="kind" value="'+type+'"><input type="hidden" name="key" value="'+escape(key)+'">'+input('Your name (shown on the gift)','sender',true)+
   [1,2].map(n=>'<fieldset><legend>Gift '+n+'</legend>'+input('Recipient name','name'+n)+input('Email address or mobile number with country code','contact'+n)+'</fieldset>').join('')+
   '<label><input type="checkbox" name="permission" value="yes" required> I have permission to send these gifts.</label><button>Send gifts</button></form>';
 }
 function contacts(f){
  const sender=f.get('sender')?.trim();
- if(!sender||sender.length>120||f.get('permission')!=='yes')return null;
+ if(!sender||sender.includes('@')||sender.length>40||f.get('permission')!=='yes')return null;
  const recipients=[];
  for(const slot of [1,2]){
   const name=f.get('name'+slot)?.trim(), contact=f.get('contact'+slot)?.trim();
   if(!name&&!contact)continue;
-  if(!name||name.length>120||!contact||contact.length>120)return null;
+  if(!name||name.includes('@')||name.length>40||!contact||contact.length>120)return null;
   const phone=contact.replace(/[\s()-]/g,'');
   if(/^\+[1-9]\d{7,14}$/.test(phone))recipients.push({slot,name,contact:phone,channel:'sms'});
   else if(/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(contact))recipients.push({slot,name,contact:contact.toLowerCase(),channel:'email'});
@@ -186,11 +187,12 @@ async function verified(stripe,id){
 }
 async function sendInvite(row,token){
  const code=codeFor(token), link=new URL(giftLink(token),process.env.APP_URL).href;
- const message=row.sender+' sent you a storybook gift! Open '+link+' and enter download code '+code+'.';
+ const sender=displayName(row.sender,'Someone special');
+ const message=sender+' sent you a storybook gift! Open '+link+' and enter download code '+code+'.';
  const key='storybook-'+hash(token);
  if(row.channel==='email'){
   if(!mailConfigured())throw Error('Email delivery unavailable');
-  await sendTransactionalMail({email:row.destination,subject:'Your storybook gift',html:'<p>'+escape(row.sender)+' sent you a storybook gift!</p><p><a href="'+escape(link)+'">Open your gift page</a></p><p>Your download code is <strong>'+code+'</strong>.</p>'},key);
+  await sendTransactionalMail({email:row.destination,subject:'Your storybook gift',html:'<p>'+escape(sender)+' sent you a storybook gift!</p><p><a href="'+escape(link)+'">Open your gift page</a></p><p>Your download code is <strong>'+code+'</strong>.</p>'},key);
  }else if(row.channel==='sms'){
   const {AOM_SMS_WEBHOOK_URL:endpoint,AOM_SMS_WEBHOOK_TOKEN:credential}=process.env;
   if(!endpoint||!credential)throw Error('Text delivery unavailable');
@@ -300,7 +302,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
     send(res,200,page('Send a storybook gift',(session?inviteCard(tokenFor(source,0),'Your books'):'')+sourceFields(kind,key)));return true;
    }
    const info=data&&contacts(data);
-   if(!info){send(res,400,page('Check the gift details',sourceFields(kind,key)));return true;}
+   if(!info){send(res,400,page('Check the gift details','<p>Enter names of up to 40 characters in the name fields. Put email addresses or phone numbers in the contact fields.</p>'+sourceFields(kind,key)));return true;}
    const rows=await register(pool,source,info);
    if(!rows){send(res,409,page('This gifting link has expired',''));return true;}
    let result='';
@@ -308,7 +310,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
     const token=tokenFor(source,row.slot);let sent=Boolean(row.delivery_at);
     if(!sent)try{await sendInvite(row,token);await pool.query('UPDATE aom_storybook_claims SET delivery_at=now() WHERE token_hash=$1',[hash(token)]);sent=true;}
     catch(error){console.error('Storybook invitation delivery failed',error.name);}
-    result+=inviteCard(token,row.recipient)+(sent?'<p>Invitation sent.</p>':'<p>Automatic delivery needs a retry. You can share the private link and code yourself now.</p>');
+    result+=inviteCard(token,displayName(row.recipient,'Friend'))+(sent?'<p>Invitation sent.</p>':'<p>Automatic delivery needs a retry. You can share the private link and code yourself now.</p>');
     if(!sent&&row.channel==='sms'){
      const link=new URL(giftLink(token),process.env.APP_URL).href;
      result+='<p><a class="btn" href="'+escape('sms:'+row.destination+'?body='+encodeURIComponent('Open your storybook gift: '+link+' Download code: '+codeFor(token)))+'">Open text message</a></p>';
@@ -329,7 +331,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
    const formHtml=row.used_at?'<p>'+labels[0]+'</p><a class="open" href="'+SITE+'">Visit the website</a>':
     '<form action="/storybook/open" method="post"><input type="hidden" name="gift" value="'+gift+'"><label id="languageLabel" for="language">'+labels[5]+'</label><select id="language" name="language">'+options(lang)+'</select><label id="codeLabel" for="code">'+labels[6]+'</label><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{4}" maxlength="4" required><button class="open" id="open">'+labels[4]+'</button></form>';
    const notice={wrong:'That code did not match. Check your gift message.',locked:'Too many attempts. Ask the gift organizer for help.',edition:'This language edition is still being prepared. Your code is ready to use later.'}[url.searchParams.get('notice')]||'';
-   const html=(await template()).replace('<html lang="en">','<html lang="'+lang+'">').replace('%%RECIPIENT%%',()=>escape(row.recipient)).replace('%%SENDER%%',()=>escape(row.sender))
+   const html=(await template()).replace('<html lang="en">','<html lang="'+lang+'">').replace('%%RECIPIENT%%',()=>escape(displayName(row.recipient,'Friend'))).replace('%%SENDER%%',()=>escape(displayName(row.sender,'Someone special')))
     .replace('%%NOTICE%%',()=>notice?'<p role="status">'+notice+'</p>':'').replace('%%FORM%%',()=>formHtml);
    send(res,200,html);return true;
   }
