@@ -31,24 +31,49 @@ footer{max-width:1122px;margin:auto;text-align:center;background:#01402e;color:#
 <script>
 (()=>{'use strict';
 const q=new URLSearchParams(location.search);
-const token=q.get('gift')||'';let lang='en';
+const token=(q.get('gift')||'').trim();
+const valid=/^[a-f0-9]{64}$/i.test(token);
 const names=[q.get('to'),q.get('from'),q.get('shop')].map(x=>String(x||'').trim().slice(0,80));
-const box=document.getElementById('nameplate');
-if(/^[a-f0-9]{64}$/.test(token)&&names[0]&&names[1]){
- const t=document.createElement('span'),s=document.createElement('span');
- t.textContent=names[0]+', ';s.className='sender';s.textContent=names[1];
- const b=document.createElement('span');b.textContent=names[2]?' from '+names[2]+' sent you a gift!':' sent you a gift!';
- box.append(t,s,b);box.style.display='flex';
-}
 const langs={en:'en',de:'de',pt:'pt-PT'};
-function choose(code){lang=code;for(const id of Object.keys(langs))document.getElementById(id).setAttribute('aria-pressed',String(id===code));}
+const copy={
+ en:{sent:'sent you a gift!',from:'from',missing:'This is the gift preview. To receive your books, open your unique gift link from the gift email.',opening:'Opening your personal gift…',failed:'Unable to open your gift right now. Please try again using the link in your gift email.'},
+ de:{sent:'hat dir ein Buchgeschenk geschickt!',from:'von',missing:'Dies ist die Geschenkvorschau. Öffne den persönlichen Geschenklink aus deiner E-Mail, um deine Bücher zu erhalten.',opening:'Dein persönliches Geschenk wird geöffnet…',failed:'Dein Geschenk kann gerade nicht geöffnet werden. Bitte versuche es erneut über den Link in deiner E-Mail.'},
+ pt:{sent:'enviou-te livros de presente!',from:'de',missing:'Esta é a pré-visualização do presente. Abre o teu link pessoal no e-mail para receberes os livros.',opening:'A abrir o teu presente pessoal…',failed:'Não foi possível abrir o teu presente agora. Tenta novamente através do link do e-mail.'}
+};
+let lang=Object.prototype.hasOwnProperty.call(langs,q.get('language'))?q.get('language'):'en';
+const nameplate=document.getElementById('nameplate');
+const hint=document.getElementById('hint');
+function show(message){hint.textContent=message;hint.style.display='block';}
+function drawNames(){
+ nameplate.replaceChildren();
+ if(!valid||!names[0]||!names[1]){nameplate.style.display='none';return;}
+ const lead=document.createElement('span');
+ const sender=document.createElement('span');
+ sender.className='sender';
+ const tail=document.createElement('span');
+ lead.textContent=names[0]+', ';
+ sender.textContent=names[1];
+ tail.textContent=names[2]?' '+copy[lang].from+' '+names[2]+' '+copy[lang].sent:' '+copy[lang].sent;
+ nameplate.append(lead,sender,tail);
+ nameplate.style.display='flex';
+}
+function choose(code){
+ lang=code;document.documentElement.lang=code;
+ for(const id of Object.keys(langs))document.getElementById(id).setAttribute('aria-pressed',String(id===code));
+ if(hint.style.display==='block'&&!valid)show(copy[lang].missing);
+ drawNames();
+}
 for(const id of Object.keys(langs))document.getElementById(id).addEventListener('click',()=>choose(id));
-const hint=document.getElementById('hint');function show(text){hint.textContent=text;hint.style.display='block';}
-document.getElementById('openGift').addEventListener('click',()=>{
- if(!/^[a-f0-9]{64}$/.test(token)){show('Open the personal gift link sent by your barber to unlock your free books.');return;}
+const open=document.getElementById('openGift');
+open.addEventListener('click',()=>{
+ if(!valid){show(copy[lang].missing);return;}
  const dest=new URL('https://authors-on-a-mission-members.onrender.com/barber/redeem');
- dest.searchParams.set('gift',token);dest.searchParams.set('language',langs[lang]);
+ dest.searchParams.set('gift',token.toLowerCase());
+ dest.searchParams.set('language',langs[lang]);
+ open.disabled=true;
+ show(copy[lang].opening);
  location.assign(dest.href);
 });
+choose(lang);
 })();
 </script></body></html>
