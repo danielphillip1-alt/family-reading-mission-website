@@ -16,10 +16,48 @@ async function titles(pool,at,lang){const q=await pool.query(`
  SELECT r.slug FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.status='published' AND r.published_at<=$1
  UNION SELECT r.slug FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.status='published' AND r.published_at<=$1
  ORDER BY slug`,[at,lang]);return q.rows.map(x=>x.slug);}
-async function pdf(pool,res,slug,lang,at){if(!/^[a-z0-9-]{3,80}$/.test(slug||''))return send(res,400,'Invalid title','text/plain');const q=await pool.query(`
+async function pdf(pool,res,slug,lang,at,disposition='attachment'){if(!/^[a-z0-9-]{3,80}$/.test(slug||''))return send(res,400,'Invalid title','text/plain');const q=await pool.query(`
  SELECT f.pdf_content FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.slug=$1 AND r.status='published' AND r.published_at<=$3
- UNION ALL SELECT f.pdf_content FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.slug=$1 AND r.status='published' AND r.published_at<=$3 LIMIT 1`,[slug,lang,at]);if(!q.rowCount)return send(res,404,'This book is not included in your purchased collection.','text/plain');const b=q.rows[0].pdf_content;res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="AOM-'+slug+'-'+lang+'.pdf"','Content-Length':b.length,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end(b);}
+ UNION ALL SELECT f.pdf_content FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.slug=$1 AND r.status='published' AND r.published_at<=$3 LIMIT 1`,[slug,lang,at]);if(!q.rowCount)return send(res,404,'This book is not included in your purchased collection.','text/plain');const b=q.rows[0].pdf_content;res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':disposition+'; filename="AOM-'+slug+'-'+lang+'.pdf"','Content-Length':b.length,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end(b);}
 const list=(slugs,base)=>slugs.length?'<ul>'+slugs.map(s=>'<li><a class="btn" href="'+base+encodeURIComponent(s)+'">'+safe(s.replaceAll('-',' '))+' (PDF)</a></li>').join('')+'</ul>':'<p>No approved files are currently available for this language. Please contact support with your payment receipt.</p>';
+
+const bookNames={
+ en:['Zachary and the My Unique Hat','Zachary and the School That Believed in Him','Emir and the Boy Who Never Smiles','Emir and the Barbershop Boys and Salon Girls'],
+ de:['Zachary und der „My Unique“-Hut','Zachary und die Schule, die an ihn glaubte','Emir and the Boy Who Never Smiles','Emir and the Barbershop Boys and Salon Girls'],
+ 'pt-PT':['Zachary e o Chapéu My Unique','Zachary e a Escola que Acreditou Nele','Emir and the Boy Who Never Smiles','Emir and the Barbershop Boys and Salon Girls']
+};
+const readerCopy={
+ en:{save:'Be sure to download the book so you can read it again anytime.',download:'Download the book (PDF)',full:'Read full screen',more:'More books in your gift',missing:'This book is not yet available in your chosen language.'},
+ de:{save:'Lade das Buch unbedingt herunter, damit du es jederzeit wieder lesen kannst.',download:'Buch herunterladen (PDF)',full:'Im Vollbild lesen',more:'Weitere Bücher in deinem Geschenk',missing:'Dieses Buch ist in deiner ausgewählten Sprache noch nicht verfügbar.'},
+ 'pt-PT':{save:'Não te esqueças de descarregar o livro para o poderes ler novamente sempre que quiseres.',download:'Descarregar o livro (PDF)',full:'Ler em ecrã inteiro',more:'Mais livros no teu presente',missing:'Este livro ainda não está disponível no idioma que escolheste.'}
+};
+export function directGiftAccess(gift){
+ return createHmac('sha256',process.env.AOM_BARBER_GIFT_SECRET||process.env.STRIPE_WEBHOOK_SECRET).update('gift-reader:'+gift).digest('hex');
+}
+function readerUrl(path,access,slug,inline=false){
+ const params=new URLSearchParams({access});
+ if(slug)params.set('slug',slug);
+ if(inline)params.set('inline','1');
+ return '/barber/'+path+'?'+params;
+}
+function giftReader(access,lang,available,slug){
+ const copy=readerCopy[lang];
+ const title=bookNames[lang][REQUIRED_BUNDLE_SLUGS.indexOf(slug)];
+ const namebook=bookNames[lang];
+ const menu=REQUIRED_BUNDLE_SLUGS.filter(x=>x!==slug).map(x=>{
+  const name=safe(namebook[REQUIRED_BUNDLE_SLUGS.indexOf(x)]);
+  return '<li>'+ (available.includes(x)?'<a href="'+safe(readerUrl('reader',access,x))+'">'+name+'</a>':name+' · '+safe(copy.missing))+'</li>';
+ }).join('');
+ const inline=readerUrl('reader-pdf',access,slug,true);
+ const attach=readerUrl('reader-pdf',access,slug);
+ const content='<p><strong>'+safe(copy.save)+'</strong></p>'+
+  '<p><a class="btn" href="'+safe(attach)+'">'+safe(copy.download)+'</a> '+
+  '<a class="btn" href="'+safe(inline)+'">'+safe(copy.full)+'</a></p>'+
+  '<iframe title="'+safe(title)+'" src="'+safe(inline)+'" style="width:100%;height:75vh;border:0;background:#fff"></iframe>'+
+  '<h2>'+safe(copy.more)+'</h2><ul>'+menu+'</ul>';
+ return page(title,content).replace('<html lang="en">','<html lang="'+lang+'">').replace('max-width:650px','max-width:900px');
+}
+
 // Stripe-verified paid checkouts may supply two optional recipient email addresses.
 // The purchase remains valid when either email is blank; the customer can share links later.
 // A database update reserves each invitation slot to avoid duplicate sends on refresh.
@@ -90,12 +128,43 @@ try{if(email&&mailConfigured())await sendTransactionalMail({email,subject:'Your 
 send(res,200,page('Thank you for your purchase!','<p>Your one-time €24.99 purchase is verified. Your personal downloads:</p>'+list(await titles(pool,at,lang),'/barber/pdf?session_id='+encodeURIComponent(id)+'&slug=')+'<h2>Personalize your two gifts</h2><p><a class="btn" href="'+safe(new URL('/barber/setup?session_id='+id,process.env.APP_URL).href)+'">Enter names for the gift page</a></p><p>Save the names first, then send each recipient their personalized private gift link. Each gift can be redeemed once. Keep your payment receipt private.</p>'));return true;
 }
 if(path==='/barber/pdf'&&req.method==='GET'){const s=await verified(stripe,id);if(!s){send(res,403,'Payment not verified','text/plain');return true;}await pdf(pool,res,slug,language(s),new Date(s.created*1000));return true;}
+
 if(path==='/barber/redeem'&&req.method==='GET'){
-if(!/^[a-f0-9]{64}$/.test(gift||'')){send(res,404,page('Invalid gift','Gift link not found.'));return true;}
-const q=await pool.query('SELECT CASE WHEN gift_hash=$1 THEN claimed_at ELSE claimed2_at END AS claimed_at FROM aom_barber_gifts WHERE gift_hash=$1 OR gift2_hash=$1',[hash(gift)]);
-if(!q.rowCount||q.rows[0].claimed_at){send(res,409,page('Gift unavailable','This gift was already claimed or is invalid.'));return true;}
-const preferred=url.searchParams.get('language')||'en';
-send(res,200,page('Claim your free book gift','<p>Someone has sent you a digital book gift. Choose one language. No payment required.</p><form method="post" action="/barber/redeem"><input type="hidden" name="gift" value="'+safe(gift)+'"><label>Email for your access link<input required type="email" name="email" maxlength="254"></label><label>Language<select name="language"><option value="en"'+(preferred==='en'?' selected':'')+'>English</option><option value="de"'+(preferred==='de'?' selected':'')+'>Deutsch</option><option value="pt-PT"'+(preferred==='pt-PT'?' selected':'')+'>Português</option></select></label><button>Redeem once</button></form><small>Email is for book delivery, not marketing.</small>'),'text/html; charset=utf-8','strict-origin');return true;
+ if(!/^[a-f0-9]{64}$/.test(gift||'')){send(res,404,page('Invalid gift','Gift link not found.'));return true;}
+ const preferred=url.searchParams.get('language');
+ const lang=langs.has(preferred)?preferred:'en';
+ const bearer=directGiftAccess(gift), tokenHash=hash(gift), accessHash=hash(bearer);
+ const q=await pool.query(`UPDATE aom_barber_gifts SET
+    claimed_at=CASE WHEN gift_hash=$1 THEN COALESCE(claimed_at,now()) ELSE claimed_at END,
+    claimed2_at=CASE WHEN gift2_hash=$1 THEN COALESCE(claimed2_at,now()) ELSE claimed2_at END,
+    recipient_language=CASE WHEN gift_hash=$1 THEN COALESCE(recipient_language,$2) ELSE recipient_language END,
+    recipient2_language=CASE WHEN gift2_hash=$1 THEN COALESCE(recipient2_language,$2) ELSE recipient2_language END,
+    access_hash=CASE WHEN gift_hash=$1 THEN $3 ELSE access_hash END,
+    access2_hash=CASE WHEN gift2_hash=$1 THEN $3 ELSE access2_hash END
+    WHERE (gift_hash=$1 AND (claimed_at IS NULL OR access_hash=$3))
+       OR (gift2_hash=$1 AND (claimed2_at IS NULL OR access2_hash=$3))
+    RETURNING session_id`,[tokenHash,lang,accessHash]);
+ if(!q.rowCount){send(res,409,page('Gift unavailable','Use the private book link from your gift email if you already claimed this gift.'));return true;}
+ const dest=readerUrl('reader',bearer,'');
+ res.writeHead(303,{'Location':dest,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();return true;
+}
+if((path==='/barber/reader'||path==='/barber/reader-pdf')&&req.method==='GET'){
+ if(!/^[a-f0-9]{64}$/.test(access||'')){send(res,403,'Invalid gift access','text/plain');return true;}
+ const q=await pool.query('SELECT CASE WHEN access_hash=$1 THEN recipient_language ELSE recipient2_language END AS recipient_language FROM aom_barber_gifts WHERE (access_hash=$1 AND claimed_at IS NOT NULL) OR (access2_hash=$1 AND claimed2_at IS NOT NULL)',[hash(access)]);
+ if(!q.rowCount){send(res,403,'Gift access unavailable','text/plain');return true;}
+ const lang=q.rows[0].recipient_language, at=new Date();
+ if(!langs.has(lang)){send(res,403,'Gift language unavailable','text/plain');return true;}
+ if(path==='/barber/reader-pdf'){
+  if(!REQUIRED_BUNDLE_SLUGS.includes(slug)){send(res,404,'This book is not included in your gift.','text/plain');return true;}
+  await pdf(pool,res,slug,lang,at,url.searchParams.get('inline')==='1'?'inline':'attachment');
+  return true;
+ }
+ const available=await titles(pool,at,lang);
+ const book=slug||REQUIRED_BUNDLE_SLUGS.find(x=>available.includes(x));
+ if(!book||!REQUIRED_BUNDLE_SLUGS.includes(book)||!available.includes(book)){
+  send(res,404,page('Book unavailable',safe(readerCopy[lang].missing)));return true;
+ }
+ send(res,200,giftReader(access,lang,available,book));return true;
 }
 if(path==='/barber/redeem'&&req.method==='POST'){
 const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>4096){send(res,413,'Too large','text/plain');return true;}chunks.push(chunk);}
