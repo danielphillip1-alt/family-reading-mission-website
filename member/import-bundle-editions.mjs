@@ -12,10 +12,17 @@ const editions=[
   {slug:'emir-barbershop-boys-and-salon-girls',lang:'en',file:'emir2-en',sha:'b8a7758c401a62c209caed51793abd72203e0a4180c48d072962e0fb6babb9fb',parts:7}
 ];
 async function decrypt(item,key){
- let contents='';
- if(item.parts){for(let i=1;i<=item.parts;i++)contents+=(await readFile(new URL('./secure-editions/'+item.file+'.part'+i,import.meta.url),'utf8')).trim();}
- else contents=(await readFile(new URL('./secure-editions/'+item.file+'.enc64',import.meta.url),'utf8')).trim();
- const packed=Buffer.from(contents,'base64');if(packed.length<100)throw Error('Missing private PDF data for '+item.file);
+ let packed;
+ if(item.parts){
+   let contents='';
+   for(let i=1;i<=item.parts;i++) contents+=(await readFile(new URL('./secure-editions/'+item.file+'.part'+i,import.meta.url),'utf8')).trim();
+   packed=Buffer.from(contents,'base64');
+ } else {
+   const raw=await readFile(new URL('./secure-editions/'+item.file+'.enc64',import.meta.url));
+   const ascii=raw.toString('ascii').trim();
+   packed=/^[A-Za-z0-9+/=\\r\\n]+$/.test(ascii) && ascii.startsWith('AAAA') ? Buffer.from(ascii,'base64') : raw;
+ }
+ if(packed.length<100)throw Error('Missing private PDF data for '+item.file);
  const dec=createDecipheriv('chacha20',key,packed.subarray(0,16));
  const pdf=Buffer.concat([dec.update(packed.subarray(16)),dec.final()]);
  if(pdf.length<100||pdf.length>12582912||pdf.subarray(0,5).toString()!=='%PDF-')throw Error('PDF validation failed for '+item.file);
@@ -27,9 +34,18 @@ export async function importBundleBooks(pool){
  const keyHex=process.env.AOM_BOOK_BLOB_KEY;
  if(!pool||!keyHex||!/^[a-f0-9]{64}$/i.test(keyHex))return {skipped:true,reason:'private edition key unavailable'};
  const key=Buffer.from(keyHex,'hex');
- // Always validate all editions before beginning the import transaction.
- const verified=[];
- for(const edition of editions)verified.push({...edition,pdf:await decrypt(edition,key)});
+ // Validate all present editions; do not expose incomplete files.
+ const verified=[],missing=[];
+ for(const edition of editions){
+   try { verified.push({...edition,pdf:await decrypt(edition,key)}); }
+   catch(err){
+     if(err?.code==='ENOENT' || String(err?.message).startsWith('Missing private PDF data')){
+       missing.push(edition.file);continue;
+     }
+     throw err; // Checksum, decryption or integrity failures are fatal.
+   }
+ }
+ if(!verified.length)return {skipped:true,reason:'no complete editions',missing};
  const client=await pool.connect();
  try{
   await client.query('BEGIN');
@@ -70,7 +86,7 @@ export async function importBundleBooks(pool){
     inserted.push(e.file);
   }
   await client.query('COMMIT');
-  return {imported:true,count:inserted.length,editions:inserted};
+  return {imported:true,count:inserted.length,editions:inserted,missing};
  }catch(err){try{await client.query('ROLLBACK')}catch{}throw err}
  finally{client.release()}
 }
