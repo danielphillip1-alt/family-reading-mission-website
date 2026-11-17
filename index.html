@@ -168,4 +168,4 @@ applyLanguage('en');
  const apply=()=>{const lang=document.documentElement.lang in copy?document.documentElement.lang:'en',x=copy[lang];const headline=document.querySelector('.hero-headline'),intro=document.querySelector('.hero .subtitle'),eyebrow=document.querySelector('.hero .eyebrow'),sticker=document.querySelector('.hero .sticker');if(headline)headline.innerHTML=x.head;if(intro)intro.textContent=x.intro;if(eyebrow)eyebrow.textContent='AUTHORS ON A MISSION · DIGITAL BOOKS';if(sticker)sticker.textContent='STORIES · LEARNING · COMMUNITY';action.textContent=x.action;header.querySelector('h2').textContent=x.library;header.querySelector('p').textContent=x.detail;const sample=document.querySelector('#samples .section-title');if(sample)sample.textContent=x.sample};
  document.querySelectorAll('[data-lang]').forEach(b=>b.addEventListener('click',apply));apply();
 })();
-</script><link rel="stylesheet" href="/public-language-library.css"><section id="aom-language-library" aria-label="Available books by language"></section><script defer src="/public-language-library.js"></script></body></html>
+</script></body></html>
