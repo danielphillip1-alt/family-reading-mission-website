@@ -17,7 +17,7 @@ import {auditApprovedBookEditions} from './audit-approved-editions.mjs';
 import {testLiveStorybookRoutes} from './live-storybook-smoke.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
 import {handleBarber} from './barber-gifts.mjs';
-import {handleStorybook,storybookSchema} from './storybook-gifts.mjs';
+import {handleStorybook,storybookSchema,warmGiftArchives} from './storybook-gifts.mjs';
 import {handleGiftPersonalization} from './gift-personalization.mjs';
 import {testFirstBookDelivery,testTranslatedBooksDelivery} from './delivery-smoke.mjs';
 
@@ -678,6 +678,7 @@ startupMigrations.then(async()=>{
   console.log('German Emir approved book import:',JSON.stringify(germanEmirImport));
   const bundleImport=await importBundleBooks(pool);
   if(bundleImport.imported) console.log('Private bundle book editions imported:',bundleImport.count);
+  void warmGiftArchives(pool).then(rows=>console.log('Private language ZIP cache ready:',JSON.stringify(rows))).catch(err=>console.error('Private ZIP prewarm failed:',err?.message||err?.name));
   const editionSummary=await pool.query(`
    SELECT slug,language,'storybook' AS source FROM aom_storybook_files
     WHERE approved_at IS NOT NULL
