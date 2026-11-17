@@ -14,7 +14,26 @@ export const bundleTitle = (slug,lang) => {
  return row?.[{en:1,de:2,'pt-PT':3,tr:4}[lang]]||row?.[1]||slug.replaceAll('-',' ').replace(/\b\w/g,c=>c.toUpperCase());
 };
 const escape = value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const translatedTitles={
+ fr:{
+ 'emir-boy-who-never-smiles':'Emir et le garçon qui ne souriait jamais',
+ 'emir-barbershop-boys-and-salon-girls':'Emir et les garçons du salon de coiffure et les filles du salon',
+ 'emir-meets-zachary':'Emir rencontre Zachary'
+ },
+ es:{
+ 'emir-boy-who-never-smiles':'Emir y el niño que nunca sonríe',
+ 'emir-barbershop-boys-and-salon-girls':'Emir y los chicos de la barbería y las chicas del salón',
+ 'emir-meets-zachary':'Emir conoce a Zachary'
+ },
+ tr:{
+ 'emir-boy-who-never-smiles':'Emir ve Hiç Gülümsemeyen Çocuk',
+ 'emir-barbershop-boys-and-salon-girls':'Emir ve Berber Dükkânının Çocukları ve Kuaför Salonunun Kızları',
+ 'emir-meets-zachary':'Emir Zachary ile Tanışıyor'
+ }
+};
 const words={
+ fr:{title:'Ton cadeau de livres !',intro:'Les aventures de Zachary et Emir, réunies dans un cadeau. Choisis un livre pour commencer !',read:'Ouvrir le livre',download:'Télécharger le PDF',save:'Télécharge tes livres pour pouvoir les relire quand tu veux.',missing:'Pas encore disponible en français'},
+ es:{title:'¡Tu regalo de libros!',intro:'Las aventuras de Zachary y Emir reunidas en un regalo. ¡Elige un libro para empezar!',read:'Abrir libro',download:'Descargar PDF',save:'Descarga tus libros para poder volver a leerlos cuando quieras.',missing:'Todavía no disponible en español'},
  tr:{title:'Hikâye kitabı hediyen!',intro:'Zachary ve Emir’in maceraları tek bir hediyede. Okumaya başlamak için bir kitap seç!',read:'Kitabı aç',download:'PDF indir',save:'Kitaplarını tekrar okuyabilmek için indirmeyi unutma.',missing:'Bu dilde henüz mevcut değil'},
  en:{title:'Your storybook gift!',intro:'Zachary and Emir’s adventures, together in one gift. Pick a book to start reading!',read:'Open book',download:'Download PDF',save:'Be sure to download your books so you can read them again anytime.',missing:'Not yet available in this language'},
  de:{title:'Dein Büchergeschenk!',intro:'Die Abenteuer von Zachary und Emir in einem Geschenk. Such dir ein Buch aus und lies los!',read:'Buch öffnen',download:'PDF herunterladen',save:'Lade deine Bücher herunter, damit du sie jederzeit wieder lesen kannst.',missing:'In dieser Sprache noch nicht verfügbar'},
@@ -45,7 +64,8 @@ export function shelfPage({lang,available,otherEditions,link,order}){
  const w=words[lang]||words.en;
  const slugs=order||[...new Set([...bundleBooks.map(b=>b[0]),...available,...otherEditions])].filter(slug=>available.includes(slug)||otherEditions.includes(slug));
  const cards=slugs.map(slug=>{
-  const title=escape(bundleTitle(slug,lang));
+  const localizedTitle=translatedTitles[lang]?.[slug]||bundleTitle(slug,lang);
+  const title=escape(localizedTitle);
   const art=giftArt[lang+':'+slug]||giftArt[slug];
   const cover=art?'<img src="'+art+'" alt="">':'<span class="placeholder">'+title+'</span>';
   const actions=available.includes(slug)?'<a class="button" href="'+escape(link('reader',slug))+'" aria-label="'+escape(w.read+' – '+bundleTitle(slug,lang))+'">'+w.read+'</a> <a class="button secondary" href="'+escape(link('reader-pdf',slug))+'" aria-label="'+escape(w.download+' – '+bundleTitle(slug,lang))+'">'+w.download+'</a>':'<span>'+w.missing+'</span>';
