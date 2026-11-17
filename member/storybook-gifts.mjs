@@ -263,7 +263,21 @@ export async function handleStorybook({req,res,url,pool,stripe}){
  if(path==='/api/admin/storybook/upload'&&method==='GET'){
   send(res,200,storybookAdminPage(),'text/html; charset=utf-8');return true;
  }
+ if(path==='/storybook/cover'&&method==='GET'){
+  const slug=url.searchParams.get('slug');
+  if(!isBundleBook(slug)||slug==='emir-meets-zachary'||!giftArt[slug]){
+   send(res,404,'Cover unavailable','text/plain');return true;
+  }
+  const stored=giftArt[slug];
+  if(!stored.startsWith('data:image/webp;base64,')){send(res,404,'Cover unavailable','text/plain');return true;}
+  const bytes=Buffer.from(stored.slice('data:image/webp;base64,'.length),'base64');
+  res.writeHead(200,{'Content-Type':'image/webp','Content-Length':bytes.length,'X-Content-Type-Options':'nosniff','Cache-Control':'public,max-age=3600'});
+  res.end(bytes);return true;
+ }
  if(path==='/api/storybook/catalog'&&method==='GET'){
+  const origin=req.headers.origin;
+  if(['https://www.theauthorsmission.de','https://theauthorsmission.de','https://family-reading-mission.onrender.com'].includes(origin))
+   res.setHeader('Access-Control-Allow-Origin',origin);
   if(!pool){send(res,503,JSON.stringify({error:'catalog temporarily unavailable'}),'application/json');return true;}
   try{
    const data=await pool.query(`
