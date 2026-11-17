@@ -331,7 +331,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
   if(path==='/storybook/gift'&&method==='GET'){
    const selected=url.searchParams.get('language');
    const lang=row.language||(Object.hasOwn(languages,selected)?selected:'en');
-   const labels=copy[lang];
+   const labels=copy[lang]||copy.en;
    const formHtml=row.used_at?'<p>'+labels[0]+'</p><a class="open" href="'+SITE+'">Visit the website</a>':
     '<form action="/storybook/open" method="post"><input type="hidden" name="gift" value="'+gift+'"><label id="languageLabel" for="language">'+labels[5]+'</label><select id="language" name="language">'+options(lang)+'</select><label id="codeLabel" for="code">'+labels[6]+'</label><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{4}" maxlength="4" required><button class="open" id="open">'+labels[4]+'</button></form>';
    const notice={wrong:'That code did not match. Check your gift message.',locked:'Too many attempts. Ask the gift organizer for help.',edition:'This language edition is still being prepared. Your code is ready to use later.'}[url.searchParams.get('notice')]||'';
@@ -360,7 +360,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
    if(path==='/storybook/pdf'){send(res,403,'Download session closed','text/plain');return true;}
    redirect(res,giftLink(gift));return true;
   }
-  const lang=row.language,labels=copy[lang];
+  const lang=row.language,labels=copy[lang]||copy.en;
   if(path==='/storybook/finish'&&method==='POST'){
    await pool.query('UPDATE aom_storybook_claims SET finished_at=now(),session_hash=NULL WHERE token_hash=$1 AND session_hash=$2',[key,hash(session)]);
    redirect(res,SITE,{'Set-Cookie':cookie(gift,'',0)});return true;
