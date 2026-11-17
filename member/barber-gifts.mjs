@@ -129,7 +129,7 @@ if(path==='/barber/free-books'&&req.method==='GET'){
 }
 if(path==='/barber/free-bundle.zip'&&req.method==='GET'){
  const lang=langs.has(url.searchParams.get('language'))?url.searchParams.get('language'):'en';
- const available=(await titles(pool,new Date(),lang)).filter(isBundleBook);
+ const available=await titles(pool,new Date(),lang);
  if(!available.length){send(res,503,page('Books being prepared','<p>There are no approved books ready for this language yet.</p>'));return true;}
  const entries=[];
  for(const slug of available){
