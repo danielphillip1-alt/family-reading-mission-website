@@ -133,6 +133,23 @@ async function deliverFile(pool,res,slug,lang,inline){
  }
  res.end();
 }
+
+// The gifted library is a directory of individually approved, fully stored PDFs.
+// A 12-book merged bundle remains a separate checkout/download readiness gate.
+async function availableLanguageBooks(pool,lang){
+ const results=[];
+ const candidates=[...new Set((await pool.query(
+  `SELECT slug FROM aom_storybook_files WHERE language=$1 AND approved_at IS NOT NULL AND slug<>$2
+   UNION SELECT r.slug FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id
+    WHERE e.language=$1 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()
+   UNION SELECT r.slug FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug
+    WHERE e.language=$1 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()`,
+  [lang,bundleSlug])).rows.map(x=>x.slug))].filter(isBundleBook);
+ for(const slug of candidates)if(await fileFor(pool,slug,lang))results.push(slug);
+ const preferred=['zachary-my-unique-hat-2026-11','zachary-school-that-believed-in-him','zachary-school-that-made-room','emir-boy-who-never-smiles','emir-barbershop-boys-and-salon-girls','emir-meets-zachary'];
+ return results.sort((a,b)=>{const ia=preferred.indexOf(a),ib=preferred.indexOf(b);return (ia<0?999:ia)-(ib<0?999:ib)||a.localeCompare(b)});
+}
+
 async function bundleReady(pool,lang){
  const row=(await pool.query('SELECT slugs FROM aom_storybook_editions WHERE language=$1',[lang])).rows[0];
  if(!row)return null;
@@ -351,7 +368,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
     await pool.query('UPDATE aom_storybook_claims SET attempts=attempts+1 WHERE token_hash=$1 AND used_at IS NULL AND attempts<8',[key]);
     redirect(res,urlFor('/storybook/gift',{gift,notice:'wrong',language:lang||'en'}));return true;
    }
-   if(!Object.hasOwn(languages,lang)||!await bundleReady(pool,lang)){
+   if(!Object.hasOwn(languages,lang)||!(await availableLanguageBooks(pool,lang)).length){
     redirect(res,urlFor('/storybook/gift',{gift,notice:'edition',language:lang||'en'}));return true;
    }
    const session=randomBytes(32).toString('hex');
@@ -369,9 +386,9 @@ export async function handleStorybook({req,res,url,pool,stripe}){
    await pool.query('UPDATE aom_storybook_claims SET finished_at=now(),session_hash=NULL WHERE token_hash=$1 AND session_hash=$2',[key,hash(session)]);
    redirect(res,SITE,{'Set-Cookie':cookie(gift,'',0)});return true;
   }
-  const slugs=(await pool.query('SELECT slugs FROM aom_storybook_editions WHERE language=$1',[lang])).rows[0]?.slugs||[];
+  const slugs=await availableLanguageBooks(pool,lang);
   const slug=url.searchParams.get('slug');
-  if(method==='GET'&&path==='/storybook/pdf'&&(slugs.includes(slug)||(slug===bundleSlug&&slugs.length===12))){
+  if(method==='GET'&&path==='/storybook/pdf'&&(slugs.includes(slug)||(slug===bundleSlug&&slugs.length===12&&await bundleReady(pool,lang)))){
    await deliverFile(pool,res,slug,lang,slug!==bundleSlug&&url.searchParams.get('inline')==='1');return true;
   }
   if(method==='GET'&&path==='/storybook/read'&&slugs.includes(slug)){
@@ -380,7 +397,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
    send(res,200,page(title,'<p><a class="btn" href="'+escape(urlFor('/storybook/shelf',{gift}))+'">‹ '+escape(languages[lang])+'</a></p><iframe style="width:100%;height:75vh;border:0" title="'+escape(title)+'" src="'+escape(inline)+'"></iframe><p><a href="'+escape(inline)+'">Open PDF</a></p>',lang));return true;
   }
   if(path==='/storybook/shelf'&&method==='GET'){
-   const actions='<div style="background:#fff2cc;text-align:center;padding:12px"><strong>'+labels[3]+'</strong><p><a class="button" href="'+escape(urlFor('/storybook/pdf',{gift,slug:bundleSlug}))+'">'+labels[1]+'</a></p><form method="post" action="/storybook/finish"><input type="hidden" name="gift" value="'+gift+'"><button class="button secondary">'+labels[2]+'</button></form></div>';
+   const merged=slugs.length===12&&await bundleReady(pool,lang);const actions='<div style="background:#fff2cc;text-align:center;padding:12px"><strong>'+labels[3]+'</strong>'+(merged?'<p><a class="button" href="'+escape(urlFor('/storybook/pdf',{gift,slug:bundleSlug}))+'">'+labels[1]+'</a></p>':'')+'<form method="post" action="/storybook/finish"><input type="hidden" name="gift" value="'+gift+'"><button class="button secondary">'+labels[2]+'</button></form></div>';
    const html=shelfPage({lang,available:slugs,otherEditions:[],order:slugs,link:(view,book)=>urlFor(view==='reader'?'/storybook/read':'/storybook/pdf',{gift,slug:book})})
     .replace('content="no-referrer"','content="strict-origin"').replace('<ul class="books">',()=>actions+'<ul class="books">');
    send(res,200,html);return true;
