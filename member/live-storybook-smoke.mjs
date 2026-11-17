@@ -22,6 +22,8 @@ export async function testLiveStorybookRoutes(pool){
  const groups=Object.fromEntries(codes.map(lang=>[lang,all.filter(x=>x.language===lang)]));
  const source=sha('automated-book-audit:'+randomBytes(32).toString('hex'));
  const pairs=[];
+ const freeSource=sha('free-gift-audit:'+randomBytes(32).toString('hex'));
+ const freeToken=randomBytes(32).toString('hex');
  let checked=0,bytesChecked=0,archivesChecked=0;
  try{
   await pool.query('INSERT INTO aom_storybook_sources(source_hash,kind,expires_at,registered_at) VALUES($1,$2,now()+interval \'15 minutes\',now())',[source,'self-audit']);
@@ -83,11 +85,26 @@ export async function testLiveStorybookRoutes(pool){
     checked++;bytesChecked+=data.length;
    }
   }
+  await pool.query('INSERT INTO aom_storybook_sources(source_hash,kind,expires_at,registered_at) VALUES($1,$2,now()+interval \'15 minutes\',now())',[freeSource,'free']);
+  await pool.query('INSERT INTO aom_storybook_claims(token_hash,source_hash,slot,sender,recipient) VALUES($1,$2,1,$3,$4)',
+   [sha(freeToken),freeSource,'Authors On A Mission QA','Temporary']);
+  const freeGift=await request('/storybook/gift?gift='+freeToken);
+  if(freeGift.status!==200)fail('Two-step free gift page unavailable');
+  const freeHtml=await freeGift.text();
+  if(!freeHtml.includes('name="language"')||!freeHtml.includes('>Download</button>')||freeHtml.includes('name="code"')||freeHtml.includes('Purchase the collection'))
+   fail('Free gift page has extra steps');
+  const freeZip=await request('/storybook/download-all?gift='+freeToken+'&language=en');
+  if(freeZip.status!==200||!freeZip.headers.get('content-type')?.includes('application/zip'))fail('Free gift two-click download failed');
+  const freeData=Buffer.from(await freeZip.arrayBuffer());
+  if(freeData.length<22||freeData.readUInt32LE(freeData.length-22)!==0x06054b50||freeData.readUInt16LE(freeData.length-12)!==groups.en.length)
+   fail('Free gift ZIP incomplete');
   const unauthorized=await request('/storybook/pdf?gift='+randomBytes(32).toString('hex')+'&slug=emir-boy-who-never-smiles');
   if(unauthorized.status===200)fail('Unauthenticated download was permitted');
-  return {passed:true,languages:codes,editionsChecked:checked,archivesChecked,bytesChecked,unauthorizedDownloadDenied:true};
+  return {passed:true,languages:codes,editionsChecked:checked,archivesChecked,freeGiftTwoStepPassed:true,bytesChecked,unauthorizedDownloadDenied:true};
  }finally{
   await pool.query('DELETE FROM aom_storybook_claims WHERE source_hash=$1',[source]);
+  await pool.query('DELETE FROM aom_storybook_claims WHERE source_hash=$1',[freeSource]);
   await pool.query('DELETE FROM aom_storybook_sources WHERE source_hash=$1',[source]);
+  await pool.query('DELETE FROM aom_storybook_sources WHERE source_hash=$1',[freeSource]);
  }
 }
