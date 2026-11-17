@@ -16,7 +16,10 @@ const approved={
  'emir-meets-zachary:es':{size:17869805,sha256:'dac7f72239bbca376d3a4622f4244c7780263db6d5a5ac779e5509dc56d530cf'},
  'emir-meets-zachary:de':{size:17870102,sha256:'e2be47f81ee400fd22b8d363b364c3aa6d830aaed5c204449204541654d911e2'},
  'emir-meets-zachary:tr':{size:17870796,sha256:'02ba124bd4652e48237899804ac334725f241b3e7a9eb8c7cfc63bfd8ac23cee'},
- 'emir-meets-zachary:fr':{size:20990663,sha256:'bb8f305fe3d6429d9abad1d0ab2dd26620eb3bc80cf09528771f369606196dd2'}
+ 'emir-meets-zachary:fr':{size:20990663,sha256:'bb8f305fe3d6429d9abad1d0ab2dd26620eb3bc80cf09528771f369606196dd2'},
+ // Zachary Book Four (English), owner-approved manuscript; only typography change:
+ // the "English manuscript · Editorial draft · 8 November 2026" footer was removed.
+ 'zachary-biggest-lesson-yet:en':{size:26345338,sha256:'e1e6a50138bfeffd20089ac056d04812f8fd3d21ed1a9a4c36049c298070b9a1'}
 };
 const chunkSize=524288,maxBody=4*1048576;
 const pending=new Map();

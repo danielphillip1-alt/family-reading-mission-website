@@ -4,6 +4,7 @@ export const bundleBooks = [
  ['zachary-my-unique-hat-2026-11','Zachary and the “My Unique” Hat','Zachary und der „My Unique“-Hut','Zachary e o Chapéu My Unique'],
  ['zachary-school-that-believed-in-him','Zachary and the School That Believed in Him','Zachary und die Schule, die an ihn glaubte','Zachary e a Escola que Acreditou Nele'],
  ['zachary-school-that-made-room','Zachary and the School That Made Room','Zachary und die Schule, die Platz machte','Zachary e a Escola que Abriu Espaço'],
+ ['zachary-biggest-lesson-yet','Zachary and the Biggest Lesson Yet'],
  ['emir-boy-who-never-smiles','Emir and the Boy Who Never Smiles'],
  ['emir-barbershop-boys-and-salon-girls','Emir and the Barbershop Boys and Salon Girls'],
  ['emir-meets-zachary','Emir Meets Zachary','Emir trifft Zachary'],
@@ -43,6 +44,7 @@ const readingOrder={
  'zachary-my-unique-hat-2026-11':['Zachary',1],
  'zachary-school-that-believed-in-him':['Zachary',2],
  'zachary-school-that-made-room':['Zachary',3],
+ 'zachary-biggest-lesson-yet':['Zachary',4],
  'emir-boy-who-never-smiles':['Emir',1],
  'emir-barbershop-boys-and-salon-girls':['Emir',2],
  'emir-meets-zachary':['Emir',3]
@@ -77,8 +79,8 @@ export function shelfPage({lang,available,otherEditions,link,order}){
   const title=escape(localizedTitle);
   const art=giftArt[lang+':'+slug]||giftArt[slug];
   const originalGermanCover=lang==='de'&&slug==='zachary-my-unique-hat-2026-11';
-  const bookThreeCover=['en','es','de','tr','fr'].includes(lang)&&slug==='emir-meets-zachary';
-  const cover=bookThreeCover?'<img src="/storybook/cover?slug=emir-meets-zachary&amp;language='+lang+'" alt="'+title+'">':originalGermanCover?'<img src="/storybook/cover?slug=zachary-my-unique-hat-2026-11&amp;language=de" alt="Original German cover">'
+  const approvedCover=(slug==='emir-meets-zachary'&&['en','es','de','tr','fr'].includes(lang))||(slug==='zachary-biggest-lesson-yet'&&lang==='en');
+  const cover=approvedCover?'<img src="/storybook/cover?slug='+slug+'&amp;language='+lang+'" alt="'+title+'">':originalGermanCover?'<img src="/storybook/cover?slug=zachary-my-unique-hat-2026-11&amp;language=de" alt="Original German cover">'
    :art?'<img src="'+art+'" alt="">':'<span class="placeholder">'+title+'</span>';
   const actions=available.includes(slug)?'<a class="button" href="'+escape(link('reader',slug))+'" aria-label="'+escape(w.read+' – '+bundleTitle(slug,lang))+'">'+w.read+'</a> <a class="button secondary" href="'+escape(link('reader-pdf',slug))+'" aria-label="'+escape(w.download+' – '+bundleTitle(slug,lang))+'">'+w.download+'</a>':'<span>'+w.missing+'</span>';
   const order=readingOrder[slug]||[slug.startsWith('emir-')?'Emir':'Zachary',0];

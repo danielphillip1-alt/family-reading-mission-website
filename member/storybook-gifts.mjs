@@ -474,6 +474,11 @@ export async function handleStorybook({req,res,url,pool,stripe}){
    res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':bytes.length,'X-Content-Type-Options':'nosniff','Cache-Control':'public,max-age=3600'});
    res.end(bytes);return true;
   }
+  if(slug==='zachary-biggest-lesson-yet'&&coverLang==='en'){
+   const bytes=Buffer.from((await readFile(new URL('./approved-covers/zachary-book4-en.jpg.b64',import.meta.url),'utf8')).trim(),'base64');
+   res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':bytes.length,'X-Content-Type-Options':'nosniff','Cache-Control':'public,max-age=3600'});
+   res.end(bytes);return true;
+  }
   if(!isBundleBook(slug)||slug==='emir-meets-zachary'||!giftArt[slug]){
    send(res,404,'Cover unavailable','text/plain');return true;
   }
