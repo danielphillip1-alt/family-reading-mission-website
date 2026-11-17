@@ -96,7 +96,7 @@ test('Emir Book Three: released in English only as the exact approved file; othe
   for(const lang of ['en','de']){
    const zip=await call({pool,token},'/storybook/download-all?gift='+token+'&language='+lang);
    const has=zip.body.toString('latin1').includes('02_Emir_Series/03_Emir_Book_3_Meets_Zachary_'+lang+'.pdf');
-   assert.equal(has,expected&&lang==='en',lang+' '+(expected?'approved':'other')+' file');
+   assert.equal(has,expected&&lang==='en'&&sha===approvedSha,lang+' '+(expected?'approved':'other')+' file');
   }
  }
 });

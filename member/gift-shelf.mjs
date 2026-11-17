@@ -77,8 +77,8 @@ export function shelfPage({lang,available,otherEditions,link,order}){
   const title=escape(localizedTitle);
   const art=giftArt[lang+':'+slug]||giftArt[slug];
   const originalGermanCover=lang==='de'&&slug==='zachary-my-unique-hat-2026-11';
-  const bookThreeCover=lang==='en'&&slug==='emir-meets-zachary';
-  const cover=bookThreeCover?'<img src="/storybook/cover?slug=emir-meets-zachary&amp;language=en" alt="Emir Meets Zachary cover">':originalGermanCover?'<img src="/storybook/cover?slug=zachary-my-unique-hat-2026-11&amp;language=de" alt="Original German cover">'
+  const bookThreeCover=['en','es'].includes(lang)&&slug==='emir-meets-zachary';
+  const cover=bookThreeCover?'<img src="/storybook/cover?slug=emir-meets-zachary&amp;language='+lang+'" alt="'+title+'">':originalGermanCover?'<img src="/storybook/cover?slug=zachary-my-unique-hat-2026-11&amp;language=de" alt="Original German cover">'
    :art?'<img src="'+art+'" alt="">':'<span class="placeholder">'+title+'</span>';
   const actions=available.includes(slug)?'<a class="button" href="'+escape(link('reader',slug))+'" aria-label="'+escape(w.read+' – '+bundleTitle(slug,lang))+'">'+w.read+'</a> <a class="button secondary" href="'+escape(link('reader-pdf',slug))+'" aria-label="'+escape(w.download+' – '+bundleTitle(slug,lang))+'">'+w.download+'</a>':'<span>'+w.missing+'</span>';
   const order=readingOrder[slug]||[slug.startsWith('emir-')?'Emir':'Zachary',0];

@@ -188,9 +188,10 @@ const fileQuery=`
  WHERE r.slug=$1 AND e.language=$2 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()
 `;
 // Editorial publication lock: technical upload approval is not final manuscript
-// approval. Emir Book Three is released only in English (owner approval
-// 2026-11-17), and only as that exact approved file; other languages stay locked.
-const editorialReleases={'emir-meets-zachary':{en:'a35dcd79c4357fe79d658cd4a17884c38bb15bd95aeb16c3bd5619601690a2e5'}};
+// approval. Emir Book Three is released only in English and Spanish (owner
+// approvals 2026-11-17), each only as that exact approved file; other languages stay locked.
+const editorialReleases={'emir-meets-zachary':{en:'a35dcd79c4357fe79d658cd4a17884c38bb15bd95aeb16c3bd5619601690a2e5',es:'dac7f72239bbca376d3a4622f4244c7780263db6d5a5ac779e5509dc56d530cf'}};
+const releasedBookThree=Object.entries(editorialReleases['emir-meets-zachary']).map(([l,s])=>"('"+l+"','"+s+"')").join(',');
 const editoriallyLocked=(slug,lang)=>Object.hasOwn(editorialReleases,slug)&&!editorialReleases[slug][lang];
 async function fileFor(pool,slug,lang){
  if(editoriallyLocked(slug,lang))return null;
@@ -466,8 +467,9 @@ export async function handleStorybook({req,res,url,pool,stripe}){
     'X-Content-Type-Options':'nosniff','Cache-Control':'public,max-age=3600'});
    res.end(bytes);return true;
   }
-  if(slug==='emir-meets-zachary'&&url.searchParams.get('language')==='en'){
-   const bytes=Buffer.from((await readFile(new URL('./approved-covers/emir-book3-en.jpg.b64',import.meta.url),'utf8')).trim(),'base64');
+  const coverLang=url.searchParams.get('language');
+  if(slug==='emir-meets-zachary'&&['en','es'].includes(coverLang)&&!editoriallyLocked(slug,coverLang)){
+   const bytes=Buffer.from((await readFile(new URL('./approved-covers/emir-book3-'+coverLang+'.jpg.b64',import.meta.url),'utf8')).trim(),'base64');
    res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':bytes.length,'X-Content-Type-Options':'nosniff','Cache-Control':'public,max-age=3600'});
    res.end(bytes);return true;
   }
@@ -492,7 +494,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
       JOIN (SELECT slug,language,COUNT(*) AS count,SUM(octet_length(bytes)) AS bytes
             FROM aom_storybook_pdf_parts GROUP BY slug,language) p
         ON p.slug=f.slug AND p.language=f.language
-     WHERE f.approved_at IS NOT NULL AND (f.slug<>'emir-meets-zachary' OR (f.language='en' AND f.sha256='a35dcd79c4357fe79d658cd4a17884c38bb15bd95aeb16c3bd5619601690a2e5')) AND p.bytes=f.size AND p.count=ceil(f.size::numeric/524288)
+     WHERE f.approved_at IS NOT NULL AND (f.slug<>'emir-meets-zachary' OR (f.language,f.sha256) IN (${releasedBookThree})) AND p.bytes=f.size AND p.count=ceil(f.size::numeric/524288)
     UNION ALL
     SELECT r.slug,e.language,octet_length(b.pdf_content) AS size,e.sha256,'bundle' AS source
       FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug

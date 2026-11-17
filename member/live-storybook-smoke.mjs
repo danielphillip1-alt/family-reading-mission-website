@@ -83,7 +83,7 @@ async function runLiveStorybookRoutes(pool,secret){
  if(catalogResponse.status!==200)fail('Catalog returned '+catalogResponse.status);
  const catalog=await catalogResponse.json();
  const all=catalog.editions||[];
- if(all.some(x=>x.slug==='emir-meets-zachary'&&x.language!=='en'))fail('Unapproved Emir Book Three language appeared in public catalog');
+ if(all.some(x=>x.slug==='emir-meets-zachary'&&!['en','es'].includes(x.language)))fail('Unapproved Emir Book Three language appeared in public catalog');
  const groups=Object.fromEntries(codes.map(lang=>[lang,all.filter(x=>x.language===lang)]));
  const source=sha('automated-book-audit:'+randomBytes(32).toString('hex'));
  const pairs=[];
@@ -111,7 +111,7 @@ async function runLiveStorybookRoutes(pool,secret){
    const headers={Cookie:cookie};
    const shelf=await request('/storybook/shelf?gift='+token,{headers});
    const html=await shelf.text();
-   if(shelf.status!==200||!html.includes('class="books"')||(lang!=='en'&&html.includes('slug=emir-meets-zachary')))fail('Incorrect language shelf '+lang);
+   if(shelf.status!==200||!html.includes('class="books"')||(!['en','es'].includes(lang)&&html.includes('slug=emir-meets-zachary')))fail('Incorrect language shelf '+lang);
    const zipped=await request('/storybook/download-all?gift='+token,{headers});
    if(zipped.status!==200||!zipped.headers.get('content-type')?.includes('application/zip'))fail('Download All failed: '+lang+' HTTP '+zipped.status);
    const zip=Buffer.from(await zipped.arrayBuffer());
