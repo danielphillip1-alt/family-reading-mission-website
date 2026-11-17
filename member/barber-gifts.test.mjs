@@ -145,11 +145,22 @@ test('Language then Download: a gift link goes straight to the numbered ZIP for 
  assert.ok(text.indexOf('01_Zachary_Series/01_Zachary_Book_1_My_Unique_Hat_de.pdf')<text.indexOf('02_Emir_Series/01_Emir_Book_1_The_Boy_Who_Never_Smiles_de.pdf'));
  assert.ok(!text.includes('Meets_Zachary'));
 });
-test('No public ZIP of full books exists without a gift link',async()=>{
+test('Barbershop QR gift: Open Your Gift downloads the chosen language bundle; unknown languages are refused',async()=>{
  const f=fixture();
- for(const path of ['/barber/free-bundle.zip?language=de','/barber/free-books?language=en']){
-  const r=await request(f,path);
+ const zip=await request(f,'/barber/free-bundle.zip?language=de');
+ assert.equal(zip.res.status,200);
+ assert.match(zip.res.headers['Content-Disposition'],/Authors_On_A_Mission_de_2_Books\.zip/);
+ assert.ok(!Buffer.concat(zip.res.chunks).toString('latin1').includes('Meets_Zachary'));
+ assert.equal((await request(f,'/barber/free-bundle.zip?language=xx')).res.status,400);
+ const legacy=await request(f,'/barber/free-books?language=en');
+ assert.equal(legacy.res.headers.Location,'https://www.theauthorsmission.de/gift.html');
+});
+test('Purchased gift link in Turkish, Spanish or French downloads that language directly',async()=>{
+ const f=fixture();await request(f,'/barber/thanks?session_id='+sid);
+ const token=createHmac('sha256',process.env.AOM_BARBER_GIFT_SECRET).update('gift:'+sid).digest('hex');
+ for(const lang of ['tr','es','fr']){
+  const r=await request(f,'/barber/redeem?gift='+token+'&download=1&language='+lang);
   assert.equal(r.res.status,303);
-  assert.equal(r.res.headers.Location,'https://www.theauthorsmission.de/library.html');
+  assert.equal(r.res.headers.Location,'/barber/free-bundle.zip?language='+lang);
  }
 });

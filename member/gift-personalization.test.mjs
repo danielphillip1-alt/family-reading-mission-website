@@ -53,7 +53,8 @@ test('two personalized recipient links carry independent names with the same sen
  // Exactly Language -> Download: one form to /barber/redeem with download=1, no PIN or price.
  assert.match(a.res.body,/<form method="get" action="\/barber\/redeem"[^>]*><input type="hidden" name="gift" value="[a-f0-9]{64}"><input type="hidden" name="download" value="1">/);
  assert.match(a.res.body,/<option value="de" selected>Deutsch \(2\)<\/option>/);
- assert.doesNotMatch(a.res.body,/value="pt-PT"|value="fr"|name="code"|buy\.stripe/);
+ assert.doesNotMatch(a.res.body,/value="pt-PT"|name="code"|buy\.stripe/,'languages without books are hidden');
+ assert.match(a.res.body,/<option value="fr">Français \(2\)<\/option>/);
  assert.match(a.res.body,/>Herunterladen<\/button>/);
  assert.ok(a.res.body.includes(token(1))&&b.res.body.includes(token(2)));
  f.row.claimed_at=new Date();

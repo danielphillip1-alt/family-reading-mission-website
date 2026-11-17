@@ -59,8 +59,16 @@ async function testBarberGiftDownload(pool){
  const de=timings.de.entries;
  if(de.length!==5||!de.some(e=>e.entry.startsWith('02_Emir_Series/'))||!de.some(e=>e.size===14389311&&e.sha256==='ec7acc227dad7ab3d92893887e96e7d1bcaf80a468779bbbb71e7f017f63a52d'))
   fail('German barber ZIP is missing Emir books or the original Book One');
- const leak=await request('/barber/free-bundle.zip?language=de');
- if(leak.status===200)fail('Public full-book ZIP still served');
+ const qrGift={};
+ for(const lang of ['en','de','fr','es','tr','pt-PT']){
+  const started=performance.now();
+  const r=await request('/barber/free-bundle.zip?language='+encodeURIComponent(lang));
+  qrGift[lang]={status:r.status,books:Number(r.headers.get('x-aom-book-count')),bytes:Number(r.headers.get('content-length')),firstByteMs:Math.round(performance.now()-started)};
+  await r.body?.cancel();
+  if(r.status!==200||!qrGift[lang].books)fail('Barber QR gift ZIP failed for '+lang);
+ }
+ const routed=await request('/barber/redeem?gift='+token+'&download=1&language=tr');
+ if(routed.status!==303||!routed.headers.get('location').includes('free-bundle.zip?language=tr'))fail('Turkish gift download is not routed');
  const qaSource=sha('qa-gift:'+randomBytes(32).toString('hex')),qaToken=randomBytes(32).toString('hex'),qaBarber=randomBytes(32).toString('hex');
  await pool.query("INSERT INTO aom_storybook_sources(source_hash,kind,expires_at,registered_at) VALUES($1,'qa',now()+interval '2 hours',now())",[qaSource]);
  await pool.query("INSERT INTO aom_storybook_claims(token_hash,source_hash,slot,sender,recipient) VALUES($1,$2,1,'Authors On A Mission','QA Reader')",[sha(qaToken),qaSource]);
@@ -68,7 +76,7 @@ async function testBarberGiftDownload(pool){
   VALUES($1,now(),'qa@example.invalid','en',$2,'Authors On A Mission','QA','QA Reader')`,['qa_'+randomBytes(12).toString('hex'),sha(qaBarber)]);
  const base=process.env.APP_URL;
  console.log('AOM two-hour QA gift links (no customer data):',JSON.stringify({storybook:new URL('/storybook/gift?gift='+qaToken,base).href,barber:new URL('/barber/open?gift='+qaBarber,base).href}));
- return {passed:true,publicZipClosed:true,timings};
+ return {passed:true,qrGift,timings};
 }
 async function runLiveStorybookRoutes(pool,secret){
  const catalogResponse=await request('/api/storybook/catalog');

@@ -30,7 +30,7 @@ export async function handleGiftPersonalization({req,res,url,stripe,pool}){
       const sender=clean(row.sender_name)||'Someone special',shop=clean(row.barber_shop_name);
       const html=await giftDownloadPage({pool,req,requested:url.searchParams.get('language'),
         recipient:clean(first?row.recipient1_name:row.recipient2_name)||'Friend',sender:shop?sender+' ('+shop+')':sender,
-        action:'/barber/redeem',hidden:{gift:token,download:'1'},codes:['en','de','pt-PT']});
+        action:'/barber/redeem',hidden:{gift:token,download:'1'},codes:['en','de','fr','es','tr','pt-PT']});
       res.writeHead(200,{'Content-Type':'text/html; charset=utf-8',...header});res.end(html);return true;
     }
     if(path==='/barber/setup'){

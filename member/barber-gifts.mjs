@@ -7,6 +7,7 @@ const LINK='plink_1UcgIURuZKBP2B3nCAGISBfm';
 const LEGACY_LINK='plink_1UboGGRuZKBP2B3nzmcAPiQL';
 const validPurchase=s=>(s.payment_link===LINK&&s.currency==='usd'&&s.amount_total===4999)||(s.payment_link===LEGACY_LINK&&s.currency==='eur'&&s.amount_total===2499);
 const langs=new Set(['en','de','pt-PT']);
+const giftLanguages=new Set(['en','de','fr','es','tr','pt-PT']);
 const REQUIRED_BUNDLE_SLUGS=['zachary-my-unique-hat-2026-11','zachary-school-that-believed-in-him','emir-boy-who-never-smiles','emir-barbershop-boys-and-salon-girls'];
 const hasFullBundle=arrays=>arrays.every(slugs=>REQUIRED_BUNDLE_SLUGS.every(slug=>slugs.includes(slug)));
 
@@ -107,10 +108,18 @@ if(!pool){send(res,503,page('Service unavailable','Please contact support.'));re
 try{
 const path=url.pathname,id=url.searchParams.get('session_id'),gift=url.searchParams.get('gift'),access=url.searchParams.get('access'),slug=url.searchParams.get('slug');
 
-// Full books are never served without a private gift link or verified purchase.
-// The former public free-bundle ZIP now leads to the public book overview.
-if((path==='/barber/free-books'||path==='/barber/free-bundle.zip')&&req.method==='GET'){
- res.writeHead(303,{'Location':'https://www.theauthorsmission.de/library.html','Cache-Control':'no-store'});res.end();return true;
+// Barbershop QR gift (owner-approved free gift): the parent scans the QR on the
+// barber's wall, the child picks one of six languages on the gift page, and
+// "Open Your Gift" downloads that language's approved, numbered bundle.
+if(path==='/barber/free-bundle.zip'&&req.method==='GET'){
+ const lang=url.searchParams.get('language');
+ if(!giftLanguages.has(lang)){send(res,400,'Choose English, Deutsch, Français, Español, Türkçe or Português.','text/plain; charset=utf-8');return true;}
+ try{await sendLanguageZip(pool,res,lang);}
+ catch(e){console.error('Barber QR gift ZIP failed',e?.code||e?.name);if(!res.headersSent)send(res,500,'Download unavailable','text/plain');else res.destroy();}
+ return true;
+}
+if(path==='/barber/free-books'&&req.method==='GET'){
+ res.writeHead(303,{'Location':'https://www.theauthorsmission.de/gift.html','Cache-Control':'no-store'});res.end();return true;
 }
 
 // Standalone retail bundle: no gift links or barbershop personalization.
@@ -155,6 +164,10 @@ if(path==='/barber/pdf'&&req.method==='GET'){const s=await verified(stripe,id);i
 if(path==='/barber/redeem'&&req.method==='GET'){
  if(!/^[a-f0-9]{64}$/.test(gift||'')){send(res,404,page('Invalid gift','Gift link not found.'));return true;}
  const preferred=url.searchParams.get('language');
+ // Purchased-gift claims store en/de/pt-PT; the other gift languages download directly.
+ if(url.searchParams.get('download')==='1'&&giftLanguages.has(preferred)&&!langs.has(preferred)){
+  res.writeHead(303,{'Location':'/barber/free-bundle.zip?language='+encodeURIComponent(preferred),'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();return true;
+ }
  const lang=langs.has(preferred)?preferred:'en';
  const bearer=directGiftAccess(gift), tokenHash=hash(gift), accessHash=hash(bearer);
  const q=await pool.query(`UPDATE aom_barber_gifts SET
