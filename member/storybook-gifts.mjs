@@ -361,7 +361,12 @@ export async function handleStorybook({req,res,url,pool,stripe}){
       JOIN aom_book_files b ON b.storage_key=e.private_object_key AND b.sha256=e.sha256
      WHERE r.status='published' AND r.published_at<=now() AND e.approved_at IS NOT NULL
     ORDER BY slug,language,source`);
-   const editions=[...new Map(data.rows.map(e=>[e.slug+':'+e.language,e])).values()];
+   const chosen=new Map();
+   for(const edition of data.rows){
+    const id=edition.slug+':'+edition.language;
+    if(!chosen.has(id)||edition.source==='private-storybook')chosen.set(id,edition);
+   }
+   const editions=[...chosen.values()];
    send(res,200,JSON.stringify({editions,count:editions.length}),'application/json');
   }catch(error){console.error('Storybook catalog query failed',error.code||error.name);send(res,503,JSON.stringify({error:'catalog temporarily unavailable'}),'application/json');}
   return true;
