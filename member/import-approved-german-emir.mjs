@@ -17,8 +17,15 @@ export async function importApprovedGermanEmir(pool){
  if(!pool)return {skipped:'database not configured'};
  const existing=(await pool.query('SELECT size,sha256,approved_at IS NOT NULL AS approved FROM aom_storybook_files WHERE slug=$1 AND language=$2',
   [edition.slug,edition.language])).rows[0];
- if(existing?.approved && existing.size===edition.size && existing.sha256===edition.sha256)
-  return {alreadyPresent:true,book:edition.slug,language:edition.language};
+ if(existing?.approved && existing.size===edition.size && existing.sha256===edition.sha256){
+  const rows=(await pool.query('SELECT part,bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 ORDER BY part',
+    [edition.slug,edition.language])).rows;
+  const count=Math.ceil(edition.size/chunkSize);
+  const complete=rows.length===count&&rows.every((row,index)=>row.part===index&&row.bytes.length===Math.min(chunkSize,edition.size-index*chunkSize));
+  if(complete&&digest(Buffer.concat(rows.map(row=>row.bytes)))===edition.sha256)
+   return {alreadyPresent:true,book:edition.slug,language:edition.language};
+  return {skipped:'registered edition requires protected storage repair; existing approval unchanged'};
+ }
  if(existing && (existing.size!==edition.size || existing.sha256!==edition.sha256))
   return {skipped:'different edition already registered; no overwrite'};
  let base64='';
@@ -87,6 +94,10 @@ export async function importApprovedGermanEmir(pool){
   const expected=Math.ceil(pdf.length/chunkSize);
   if(all.rows.length!==expected||all.rows.some((r,i)=>r.part!==i||r.size!==Math.min(chunkSize,pdf.length-i*chunkSize)))
    throw Error('Approved German Emir storage validation failed');
+  const stored=await client.query('SELECT bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 ORDER BY part',
+    [edition.slug,edition.language]);
+  if(digest(Buffer.concat(stored.rows.map(row=>row.bytes)))!==edition.sha256)
+   throw Error('Stored German Emir PDF checksum mismatch');
   await client.query('UPDATE aom_storybook_files SET approved_at=now() WHERE slug=$1 AND language=$2',
    [edition.slug,edition.language]);
   await client.query('COMMIT');
