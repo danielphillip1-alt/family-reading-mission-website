@@ -33,6 +33,18 @@ h1{font-size:clamp(38px,7vw,74px);line-height:1.06;margin:14px auto;color:#ffe3a
 .how a{display:inline-block;margin-top:16px;padding:10px 18px;border-radius:25px;background:var(--berry);color:white;text-decoration:none;font:700 14px system-ui,sans-serif}
 footer{text-align:center;padding:20px;color:#e5d0a4;font:13px system-ui,sans-serif}
 @media(max-width:530px){.books{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.book{padding:11px;border-radius:13px}.book img{height:auto;max-height:190px}.book h2{font-size:15px}.language-tabs button{min-width:62px;padding:9px 12px;font-size:13px}}
+.book-action{display:inline-block;margin:10px 0 0;padding:10px 16px;background:#96203a;color:#fff9e8;border:2px solid #e1b56b;border-radius:30px;font:700 15px system-ui;cursor:pointer}
+.book-action:hover,.book-action:focus-visible{background:#67152c}
+#access-dialog{max-width:560px;width:calc(100% - 28px);padding:25px;border:3px solid #d0a357;border-radius:20px;background:#fff7e5;color:#173b2b;box-shadow:0 24px 80px #001a13b0}
+#access-dialog::backdrop{background:#001c16b8}
+#access-dialog h2{font-size:26px;line-height:1.2;margin:5px 0 12px}
+#access-dialog p{margin:12px 0}
+#access-dialog label{font-weight:bold;display:block;margin-top:20px}
+#access-link{font:16px system-ui;width:100%;padding:12px;margin:6px 0;border:2px solid #9fbaac;border-radius:10px}
+.access-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}
+.access-actions button,.access-actions a{font:700 15px system-ui;border:0;background:#12513c;color:white;border-radius:25px;padding:12px 18px;text-decoration:none;cursor:pointer}
+.access-actions .secondary{background:#872039}
+#access-error{color:#a51e2c;font-weight:700}
 </style>
 </head>
 <body>
@@ -54,7 +66,19 @@ footer{text-align:center;padding:20px;color:#e5d0a4;font:13px system-ui,sans-ser
 <p id="availability" role="status" aria-live="polite">Loading available books…</p>
 <section id="books" class="books" aria-label="Available titles"></section>
 <section class="how"><h2>Your books, your language.</h2><p>If someone sent you a book gift, open the personal gift link from their message to read or download your PDFs. The gift link protects your copies and unlocks the matching language automatically.</p><a href="/#join">Explore the book collection</a></section>
-</main><footer>© Authors On A Mission</footer>
+<dialog id="access-dialog" aria-labelledby="access-title">
+<h2 id="access-title">Open your book</h2>
+<p id="access-selected"></p>
+<p>Books are protected for customers and gift recipients. If you received a book gift, open the private link in your email, or paste that link below to enter your bookshelf.</p>
+<label for="access-link">Your private gift link</label>
+<input id="access-link" type="url" inputmode="url" autocomplete="off" placeholder="Paste the gift link from your email">
+<p id="access-error" role="status"></p>
+<div class="access-actions">
+<button id="access-go" type="button">Open my books</button>
+<a href="/#join">Purchase the collection</a>
+<button id="access-close" class="secondary" type="button">Close</button>
+</div>
+</dialog></main><footer>© Authors On A Mission</footer>
 <script>
 (()=>{
 'use strict';
@@ -87,9 +111,32 @@ function render(){
   const cover=document.createElement('img');cover.src=backend+'/storybook/cover?slug='+encodeURIComponent(item.slug);cover.alt=titles[item.slug][language]+' — original book cover';cover.loading='lazy';
   const title=document.createElement('h2');title.textContent=titles[item.slug][language];
   const badge=document.createElement('span');badge.className='edition';badge.textContent=labels[language].edition;
-  card.append(cover,title,badge);container.append(card);
+  const open=document.createElement('button');open.className='book-action';open.type='button';open.textContent='Open / Download';
+  open.addEventListener('click',()=>showAccess(item.slug,language));
+  card.append(cover,title,badge,open);container.append(card);
  }
 }
+const dialog=document.querySelector('#access-dialog'),accessSelected=document.querySelector('#access-selected'),
+ accessLink=document.querySelector('#access-link'),accessError=document.querySelector('#access-error');
+let selectedBook=null,selectedLang=null;
+function showAccess(slug,lang){
+ selectedBook=slug;selectedLang=lang;
+ accessSelected.textContent=(titles[slug]?.[lang]||titles[slug]?.en||slug)+' · '+labels[lang].edition;
+ accessError.textContent='';accessLink.value='';
+ dialog.showModal();
+}
+document.querySelector('#access-close').addEventListener('click',()=>dialog.close());
+document.querySelector('#access-go').addEventListener('click',()=>{
+ let link;
+ try{link=new URL(accessLink.value.trim());}catch{accessError.textContent='Paste the complete gift link from your email.';return;}
+ const code=link.searchParams.get('gift');
+ if(link.origin!==backend||link.pathname!=='/storybook/gift'||!/^[a-f0-9]{64}$/.test(code||'')){
+  accessError.textContent='That is not a valid Authors On A Mission gift link.';return;
+ }
+ const target=new URL('/storybook/gift',backend);target.searchParams.set('gift',code);
+ target.searchParams.set('language',selectedLang);
+ window.location.assign(target.toString());
+});
 tabs.forEach(b=>b.addEventListener('click',()=>{
  language=b.dataset.language;
  const u=new URL(location.href);u.searchParams.set('language',language);history.replaceState(null,'',u);
