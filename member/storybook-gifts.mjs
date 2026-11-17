@@ -338,8 +338,8 @@ export async function sendLanguageZip(pool,res,lang){
   'X-AOM-Book-Count':String(books.length),
   'X-AOM-Archive-Source':ready?'prepared':'direct'});
  if(ready){await streamCachedZip(ready,res);return;}
- buildArchive(pool,books,lang,plan).catch(error=>console.error('Private ZIP cache build failed',error?.message||error?.name));
- await streamBookZip({res,language:lang,books,readChunks:book=>bookChunks(pool,book,lang)});
+ try{await streamBookZip({res,language:lang,books,readChunks:book=>bookChunks(pool,book,lang)});}
+ finally{buildArchive(pool,books,lang,plan).catch(error=>console.error('Private ZIP cache build failed',error?.message||error?.name));}
 }
 export async function sendApprovedPdf(pool,res,slug,lang,inline=false){
  await deliverFile(pool,res,slug,lang,inline);
