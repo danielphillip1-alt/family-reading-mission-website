@@ -32,6 +32,7 @@ h1{font-size:clamp(38px,7vw,74px);line-height:1.06;margin:14px auto;color:#ffe3a
 .how p{margin:0}
 .how a{display:inline-block;margin-top:16px;padding:10px 18px;border-radius:25px;background:var(--berry);color:white;text-decoration:none;font:700 14px system-ui,sans-serif}
 footer{text-align:center;padding:20px;color:#e5d0a4;font:13px system-ui,sans-serif}
+.book .edition{background:#8c1735;font-size:13px}.book h2{order:1}.book .edition{order:0;margin-top:11px}.book .book-action{order:2}.books article.book{align-items:stretch}.book img{align-self:center}
 @media(max-width:530px){.books{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.book{padding:11px;border-radius:13px}.book img{height:auto;max-height:190px}.book h2{font-size:15px}.language-tabs button{min-width:62px;padding:9px 12px;font-size:13px}}
 .book-action{display:inline-block;margin:10px 0 0;padding:10px 16px;background:#96203a;color:#fff9e8;border:2px solid #e1b56b;border-radius:30px;font:700 15px system-ui;cursor:pointer}
 .book-action:hover,.book-action:focus-visible{background:#67152c}
@@ -99,6 +100,13 @@ const titles={
  'emir-boy-who-never-smiles':{en:'Emir and the Boy Who Never Smiles',de:'Emir und der Junge, der niemals lächelt',tr:'Emir ve Hiç Gülümsemeyen Çocuk',es:'Emir y el niño que nunca sonríe',fr:'Emir et le garçon qui ne souriait jamais'},
  'emir-barbershop-boys-and-salon-girls':{en:'Emir and the Barbershop Boys and Salon Girls',de:'Emir und die Barbershop-Jungs und Salon-Mädchen',tr:'Emir ve Berber Dükkânının Çocukları ve Kuaför Salonunun Kızları',es:'Emir y los chicos de la barbería y las chicas del salón',fr:'Emir et les garçons du salon de coiffure et les filles du salon'}
 };
+const sequence={
+ 'zachary-my-unique-hat-2026-11':['Zachary',1],
+ 'zachary-school-that-believed-in-him':['Zachary',2],
+ 'zachary-school-that-made-room':['Zachary',3],
+ 'emir-boy-who-never-smiles':['Emir',1],
+ 'emir-barbershop-boys-and-salon-girls':['Emir',2]
+};
 const order=Object.keys(titles),container=document.querySelector('#books'),message=document.querySelector('#availability'),tabs=[...document.querySelectorAll('[data-language]')];
 let all=[],loaded=false,language='en';
 function render(){
@@ -111,7 +119,7 @@ function render(){
   const card=document.createElement('article');card.className='book';
   const cover=document.createElement('img');cover.src=backend+'/storybook/cover?slug='+encodeURIComponent(item.slug);cover.alt=titles[item.slug][language]+' — original book cover';cover.loading='lazy';
   const title=document.createElement('h2');title.textContent=titles[item.slug][language];
-  const badge=document.createElement('span');badge.className='edition';badge.textContent=labels[language].edition;
+  const badge=document.createElement('span');badge.className='edition';const part=sequence[item.slug];badge.textContent=part?part[0]+' · Book '+part[1]+' · '+labels[language].edition:labels[language].edition;
   const open=document.createElement('button');open.className='book-action';open.type='button';open.textContent='Open / Download';
   open.addEventListener('click',()=>showAccess(item.slug,language));
   card.append(cover,title,badge,open);container.append(card);
