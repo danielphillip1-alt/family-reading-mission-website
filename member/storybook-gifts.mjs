@@ -6,7 +6,7 @@ import {sendTransactionalMail,mailConfigured} from './mail.mjs';
 import {giftArt} from './gift-shelf-art.mjs';
 import {storybookAdminPage} from './storybook-admin.mjs';
 import {shelfPage,isBundleBook,bundleTitle} from './gift-shelf.mjs';
-import {streamBookZip} from './zip-library.mjs';
+import {streamBookZip,bookZipByteLength,bookZipOrder} from './zip-library.mjs';
 
 const SITE='https://theauthorsmission.de';
 const languages={en:'English','pt-PT':'Português',de:'Deutsch',tr:'Türkçe',fr:'Français',es:'Español'};
@@ -139,7 +139,7 @@ async function deliverFile(pool,res,slug,lang,inline){
 
 async function deliverAllBooks(pool,res,slugs,lang){
  const books=[];
- for(const slug of slugs){
+ for(const slug of [...slugs].sort((a,b)=>bookZipOrder(a)-bookZipOrder(b))){
   const source=await fileFor(pool,slug,lang);
   if(!source)throw Error('A requested edition is unavailable');
   books.push({...source,slug,size:Number(source.size)});
@@ -174,6 +174,7 @@ async function deliverAllBooks(pool,res,slugs,lang){
  // confuses an earlier archive with the latest complete download.
  const filename='AOM_'+lang.replace(/[^a-z0-9-]/gi,'_')+'_'+books.length+'_Books_'+new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'.zip';
  res.writeHead(200,{...headers,'Content-Type':'application/zip',
+  'Content-Length':bookZipByteLength(books,lang),
   'Content-Disposition':'attachment; filename="'+filename+'"',
   'X-AOM-Book-Count':String(books.length)});
  await streamBookZip({res,language:lang,books,readChunks});
