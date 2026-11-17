@@ -22,7 +22,7 @@ export async function testLiveStorybookRoutes(pool){
  const groups=Object.fromEntries(codes.map(lang=>[lang,all.filter(x=>x.language===lang)]));
  const source=sha('automated-book-audit:'+randomBytes(32).toString('hex'));
  const pairs=[];
- let checked=0,bytesChecked=0;
+ let checked=0,bytesChecked=0,archivesChecked=0;
  try{
   await pool.query('INSERT INTO aom_storybook_sources(source_hash,kind,expires_at,registered_at) VALUES($1,$2,now()+interval \'15 minutes\',now())',[source,'self-audit']);
   for(let slot=0;slot<codes.length;slot++){
@@ -45,6 +45,28 @@ export async function testLiveStorybookRoutes(pool){
    const shelf=await request('/storybook/shelf?gift='+token,{headers});
    const html=await shelf.text();
    if(shelf.status!==200||!html.includes('class="books"')||html.includes('slug=emir-meets-zachary'))fail('Incorrect language shelf '+lang);
+   const zipped=await request('/storybook/download-all?gift='+token,{headers});
+   if(zipped.status!==200||!zipped.headers.get('content-type')?.includes('application/zip'))fail('Download All failed: '+lang+' HTTP '+zipped.status);
+   const zip=Buffer.from(await zipped.arrayBuffer());
+   if(zip.length<22||zip.readUInt32LE(zip.length-22)!==0x06054b50)fail('Download All is not a complete ZIP: '+lang);
+   const number=zip.readUInt16LE(zip.length-22+10);
+   if(number!==rows.length)fail('ZIP contains incorrect number of books: '+lang);
+   let central=zip.readUInt32LE(zip.length-22+16);
+   const seen=new Set();
+   for(let i=0;i<number;i++){
+    if(zip.readUInt32LE(central)!==0x02014b50)fail('ZIP directory corrupt: '+lang);
+    const length=zip.readUInt16LE(central+28),extra=zip.readUInt16LE(central+30),comment=zip.readUInt16LE(central+32);
+    const fname=zip.subarray(central+46,central+46+length).toString('utf8');
+    const entrySize=zip.readUInt32LE(central+24),offset=zip.readUInt32LE(central+42);
+    if(zip.readUInt32LE(offset)!==0x04034b50)fail('ZIP entry corrupt: '+fname);
+    const dataStart=offset+30+zip.readUInt16LE(offset+26)+zip.readUInt16LE(offset+28);
+    const item=rows.find(x=>fname===x.slug+'-'+lang+'.pdf');
+    if(!item||seen.has(fname)||entrySize!==item.size||sha(zip.subarray(dataStart,dataStart+entrySize))!==item.sha256)
+     fail('ZIP edition integrity failure: '+fname);
+    seen.add(fname);
+    central+=46+length+extra+comment;
+   }
+   archivesChecked++;
    for(const item of rows){
     if(!html.includes('slug='+item.slug))fail('Title missing from shelf: '+lang+' '+item.slug);
     const path='?gift='+token+'&slug='+item.slug;
@@ -63,7 +85,7 @@ export async function testLiveStorybookRoutes(pool){
   }
   const unauthorized=await request('/storybook/pdf?gift='+randomBytes(32).toString('hex')+'&slug=emir-boy-who-never-smiles');
   if(unauthorized.status===200)fail('Unauthenticated download was permitted');
-  return {passed:true,languages:codes,editionsChecked:checked,bytesChecked,unauthorizedDownloadDenied:true};
+  return {passed:true,languages:codes,editionsChecked:checked,archivesChecked,bytesChecked,unauthorizedDownloadDenied:true};
  }finally{
   await pool.query('DELETE FROM aom_storybook_claims WHERE source_hash=$1',[source]);
   await pool.query('DELETE FROM aom_storybook_sources WHERE source_hash=$1',[source]);
