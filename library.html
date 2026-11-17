@@ -64,6 +64,7 @@ footer{text-align:center;padding:20px;color:#e5d0a4;font:13px system-ui,sans-ser
 <button role="tab" data-language="fr" aria-selected="false">Français</button>
 </div>
 <p id="availability" role="status" aria-live="polite">Loading available books…</p>
+<p style="text-align:center"><button id="public-download-all" class="book-action" type="button">Download all books in this language</button></p>
 <section id="books" class="books" aria-label="Available titles"></section>
 <section class="how"><h2>Your books, your language.</h2><p>If someone sent you a book gift, open the personal gift link from their message to read or download your PDFs. The gift link protects your copies and unlocks the matching language automatically.</p><a href="/#join">Explore the book collection</a></section>
 <dialog id="access-dialog" aria-labelledby="access-title">
@@ -118,14 +119,15 @@ function render(){
 }
 const dialog=document.querySelector('#access-dialog'),accessSelected=document.querySelector('#access-selected'),
  accessLink=document.querySelector('#access-link'),accessError=document.querySelector('#access-error');
-let selectedBook=null,selectedLang=null;
-function showAccess(slug,lang){
- selectedBook=slug;selectedLang=lang;
- accessSelected.textContent=(titles[slug]?.[lang]||titles[slug]?.en||slug)+' · '+labels[lang].edition;
+let selectedBook=null,selectedLang=null,downloadAll=false;
+function showAccess(slug,lang,all=false){
+ selectedBook=slug;selectedLang=lang;downloadAll=all;
+ accessSelected.textContent=all?'Download all available books · '+labels[lang].edition:(titles[slug]?.[lang]||titles[slug]?.en||slug)+' · '+labels[lang].edition;
  accessError.textContent='';accessLink.value='';
  dialog.showModal();
 }
 document.querySelector('#access-close').addEventListener('click',()=>dialog.close());
+document.querySelector('#public-download-all').addEventListener('click',()=>showAccess(null,language,true));
 document.querySelector('#access-go').addEventListener('click',()=>{
  let link;
  try{link=new URL(accessLink.value.trim());}catch{accessError.textContent='Paste the complete gift link from your email.';return;}
@@ -135,6 +137,8 @@ document.querySelector('#access-go').addEventListener('click',()=>{
  }
  const target=new URL('/storybook/gift',backend);target.searchParams.set('gift',code);
  target.searchParams.set('language',selectedLang);
+ if(downloadAll)target.searchParams.set('download','all');
+ else if(selectedBook)target.searchParams.set('book',selectedBook);
  window.location.assign(target.toString());
 });
 tabs.forEach(b=>b.addEventListener('click',()=>{
