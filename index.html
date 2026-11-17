@@ -211,4 +211,47 @@ const selectLanguage = language => {
 };
 languageButtons.forEach(button => button.addEventListener('click', () => selectLanguage(button.dataset.lang)));
 
+</script>
+<style id="free-reading-20261117">
+/* Free reading campaign: retain the approved illustrations, logo and actual books. */
+#join,.legal-pricing-disclosure,.hero-plan-note,.hero .hero-inner [role="note"],.benefits,.closing,#share-books{display:none!important}
+.hero{background:radial-gradient(circle at 12% 22%,#1c8dc7 0,transparent 35%),radial-gradient(circle at 90% 35%,#ff9c28 0,transparent 35%),#063e5a}
+.hero-headline{font-family:Impact,'Arial Black',sans-serif!important;font-size:clamp(44px,7vw,94px)!important;line-height:1.07!important;text-shadow:4px 5px 0 #012b41}
+.hero-headline em{color:#ffd738!important}
+.free-reading-action{display:inline-flex;background:#ffdc39;color:#072e44;padding:17px 28px;border-radius:40px;font-size:clamp(18px,2vw,25px);font-weight:1000;text-decoration:none;box-shadow:0 8px 0 #e46b1c;margin:20px 0}
+#book-gallery{scroll-margin-top:30px}
+#book-gallery .gallery-grid{gap:24px}
+#book-gallery .book-card{box-shadow:0 12px 30px #042b3133;transition:transform .2s}
+#book-gallery .book-card:hover{transform:translateY(-5px)}
+.free-library-heading{text-align:center;padding:36px 15px 15px}
+.free-library-heading h2{font-size:clamp(32px,5vw,55px);margin:4px 0;color:#063c33}
+.free-library-heading p{font-size:clamp(16px,2vw,22px);margin:10px auto;max-width:720px;line-height:1.5}
+#samples{background:#fff7de;border-radius:30px}
+@media(prefers-reduced-motion:reduce){#book-gallery .book-card{transition:none}}
+</style>
+<script id="free-reading-pivot-20261117">
+(()=>{
+ const copy={
+ en:{head:'YOUR NEXT<br><em>ADVENTURE IS FREE!</em>',intro:'Amazing stories. Big adventures. Real book illustrations. Come explore our books — no purchase needed.',action:'EXPLORE THE BOOKS!',library:'Choose Your Next Adventure',detail:'Meet the characters, explore real book art and read our available pages for free.',sample:'READ FREE PAGES'},
+ de:{head:'DEIN NÄCHSTES<br><em>ABENTEUER IST GRATIS!</em>',intro:'Tolle Geschichten, große Abenteuer und echte Bilder aus unseren Büchern. Kostenlos entdecken.',action:'BÜCHER ENTDECKEN!',library:'Wähle dein nächstes Abenteuer',detail:'Entdecke die Figuren, Bilder und unsere kostenlos verfügbaren Buchseiten.',sample:'GRATIS LESEN'},
+ pt:{head:'A TUA PRÓXIMA<br><em>AVENTURA É GRÁTIS!</em>',intro:'Histórias incríveis, grandes aventuras e ilustrações dos nossos livros. Explora sem pagar.',action:'EXPLORAR OS LIVROS!',library:'Escolhe a tua próxima aventura',detail:'Descobre as personagens, as ilustrações e as páginas disponíveis gratuitamente.',sample:'LER GRÁTIS'}
+ };
+ const hero=document.querySelector('.hero-inner>div');
+ const gallery=document.querySelector('#book-gallery');
+ if(!hero||!gallery)return;
+ const action=document.createElement('a');action.href='#book-gallery';action.className='free-reading-action';hero.appendChild(action);
+ const header=document.createElement('div');header.className='free-library-heading';header.innerHTML='<h2></h2><p></p>';gallery.prepend(header);
+ const apply=()=>{
+ const lang=document.documentElement.lang in copy?document.documentElement.lang:'en',x=copy[lang];
+ const headline=document.querySelector('.hero-headline'),intro=document.querySelector('.hero .subtitle'),eyebrow=document.querySelector('.hero .eyebrow'),sticker=document.querySelector('.hero .sticker');
+ if(headline)headline.innerHTML=x.head;
+ if(intro)intro.textContent=x.intro;
+ if(eyebrow)eyebrow.textContent='AUTHORS ON A MISSION · FREE BOOKS';
+ if(sticker)sticker.textContent='SCAN · PICK A BOOK · START READING';
+ action.textContent=x.action;header.querySelector('h2').textContent=x.library;header.querySelector('p').textContent=x.detail;
+ const sample=document.querySelector('#samples .section-title');if(sample)sample.textContent=x.sample;
+ };
+ document.querySelectorAll('[data-lang]').forEach(b=>b.addEventListener('click',apply));
+ apply();
+})();
 </script></body></html>
