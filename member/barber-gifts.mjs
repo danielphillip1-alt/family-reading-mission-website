@@ -151,7 +151,7 @@ if(path==='/barber/bundle-checkout'&&req.method==='GET'){
  const selected=langs.has(url.searchParams.get('language'))?url.searchParams.get('language'):'en';
  const available=await titles(pool,new Date(),selected);
  if(available.length<12){
-  send(res,503,page('Digital book bundle — $49.99 USD','<p><strong>One-time price: $49.99 USD.</strong> The complete 12-book collection is not yet ready in the selected language. Purchasing is paused so you will not be charged for unavailable books.</p><p>Available approved titles in '+safe(selected)+': '+available.length+' of 12. Please return when the collection is ready.</p><p><a href="https://www.theauthorsmission.de/">Back to Authors On A Mission</a></p>'));return true;
+  send(res,200,page('Digital book bundle — $49.99 USD','<p><strong>One-time price: $49.99 USD.</strong> The complete 12-book collection is not yet ready in the selected language. Purchasing is paused so you will not be charged for unavailable books.</p><p>Available approved titles in '+safe(selected)+': '+available.length+' of 12. Please return when the collection is ready.</p><p><a href="https://www.theauthorsmission.de/">Back to Authors On A Mission</a></p>'));return true;
  }
  res.writeHead(303,{'Location':'https://buy.stripe.com/14A4gBdwU1DIanu4xzffy05','Cache-Control':'no-store'});res.end();return true;
 }
