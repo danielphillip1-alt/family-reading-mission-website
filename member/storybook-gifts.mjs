@@ -112,6 +112,8 @@ const fileQuery=`
  WHERE r.slug=$1 AND e.language=$2 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()
 `;
 async function fileFor(pool,slug,lang){
+ // Editorial publication lock: technical upload approval is not final manuscript approval.
+ if(slug==='emir-meets-zachary')return null;
  const stored=(await pool.query('SELECT size,sha256 FROM aom_storybook_files WHERE slug=$1 AND language=$2 AND approved_at IS NOT NULL',[slug,lang])).rows[0];
  if(stored)return stored;
  const q=await pool.query(`SELECT f.storage_key,f.sha256,octet_length(f.pdf_content) AS size
@@ -144,7 +146,7 @@ async function availableLanguageBooks(pool,lang){
     WHERE e.language=$1 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()
    UNION SELECT r.slug FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug
     WHERE e.language=$1 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()`,
-  [lang,bundleSlug])).rows.map(x=>x.slug))].filter(isBundleBook);
+  [lang,bundleSlug])).rows.map(x=>x.slug))].filter(slug=>isBundleBook(slug)&&slug!=='emir-meets-zachary');
  for(const slug of candidates)if(await fileFor(pool,slug,lang))results.push(slug);
  const preferred=['zachary-my-unique-hat-2026-11','zachary-school-that-believed-in-him','zachary-school-that-made-room','emir-boy-who-never-smiles','emir-barbershop-boys-and-salon-girls','emir-meets-zachary'];
  return results.sort((a,b)=>{const ia=preferred.indexOf(a),ib=preferred.indexOf(b);return (ia<0?999:ia)-(ib<0?999:ib)||a.localeCompare(b)});
@@ -270,7 +272,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
       JOIN (SELECT slug,language,COUNT(*) AS count,SUM(octet_length(bytes)) AS bytes
             FROM aom_storybook_pdf_parts GROUP BY slug,language) p
         ON p.slug=f.slug AND p.language=f.language
-     WHERE f.approved_at IS NOT NULL AND p.bytes=f.size AND p.count=ceil(f.size::numeric/524288)
+     WHERE f.approved_at IS NOT NULL AND f.slug<>'emir-meets-zachary' AND p.bytes=f.size AND p.count=ceil(f.size::numeric/524288)
     UNION ALL
     SELECT r.slug,e.language,octet_length(b.pdf_content) AS size,e.sha256,'bundle' AS source
       FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug
