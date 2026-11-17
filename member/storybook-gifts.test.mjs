@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {createHash,randomBytes} from 'node:crypto';
 process.env.AOM_BARBER_GIFT_SECRET='test-only-secret';
 process.env.APP_URL='https://example.test';
-const {handleStorybook}=await import('./storybook-gifts.mjs');
+const {handleStorybook,forgetGiftInventory}=await import('./storybook-gifts.mjs');
 const sha=v=>createHash('sha256').update(v).digest('hex');
+const sha256=sha;
 const pdf=n=>Buffer.from('%PDF-1.7 book '+n+' %%EOF');
 // German: Zachary 1-3, Emir 1-2 approved; Emir Book Three stored but editorially locked.
 const books={
@@ -77,4 +78,25 @@ test('expired QA gift no longer downloads; a random token never downloads',async
  assert.notEqual(expired.status,200);
  const stranger=await call(f,'/storybook/download-all?gift='+randomBytes(32).toString('hex')+'&language=de');
  assert.equal(stranger.status,404);
+});
+test('Emir Book Three: released in English only as the exact approved file; other languages stay locked',async()=>{
+ const approvedSha='a35dcd79c4357fe79d658cd4a17884c38bb15bd95aeb16c3bd5619601690a2e5';
+ for(const [sha,expected] of [[approvedSha,true],['b'.repeat(64),false]]){
+  const token=randomBytes(32).toString('hex');
+  const bytes=Buffer.from('%PDF-1.7 emir three %%EOF');
+  const pool={query:async(sql,p=[])=>{
+   if(sql.includes('FROM aom_storybook_claims WHERE token_hash=$1'))return {rows:[{token_hash:sha256(token),source_hash:'s',slot:1,sender:'A',recipient:'B'}]};
+   if(sql.includes('SELECT kind,expires_at'))return {rows:[{kind:'free'}]};
+   if(sql.trimStart().startsWith('SELECT slug FROM aom_storybook_files'))return {rows:[{slug:'emir-meets-zachary'},{slug:'emir-boy-who-never-smiles'}]};
+   if(sql.includes('SELECT size,sha256 FROM aom_storybook_files'))return {rows:[{size:bytes.length,sha256:p[0]==='emir-meets-zachary'?sha:sha256(bytes)}]};
+   if(sql.includes('FROM aom_storybook_pdf_parts'))return {rows:[{part:0,bytes}]};
+   throw Error('Unexpected '+sql.slice(0,60));
+  }};
+  forgetGiftInventory();
+  for(const lang of ['en','de']){
+   const zip=await call({pool,token},'/storybook/download-all?gift='+token+'&language='+lang);
+   const has=zip.body.toString('latin1').includes('02_Emir_Series/03_Emir_Book_3_Meets_Zachary_'+lang+'.pdf');
+   assert.equal(has,expected&&lang==='en',lang+' '+(expected?'approved':'other')+' file');
+  }
+ }
 });

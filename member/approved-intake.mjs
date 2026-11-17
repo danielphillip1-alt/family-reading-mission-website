@@ -8,7 +8,11 @@ import {refreshGiftLibrary} from './storybook-gifts.mjs';
 // checksum matches; book content is never written to the public repository.
 const approved={
  'zachary-my-unique-hat-2026-11:en':{size:15080055,sha256:'f31050cdc85bda2e3b9c3787319bde64a8a772b6cc3d46b05d6de63bd675d1ad'},
- 'zachary-my-unique-hat-2026-11:pt-PT':{size:12394782,sha256:'cf7b75b3b9838389639fec6cb85134244583c7c9e218f307ea9f63779645a68f'}
+ 'zachary-my-unique-hat-2026-11:pt-PT':{size:12394782,sha256:'cf7b75b3b9838389639fec6cb85134244583c7c9e218f307ea9f63779645a68f'},
+ // 2026-11-17: owner-approved English Emir editions, including Emir Book Three.
+ 'emir-boy-who-never-smiles:en':{size:16217672,sha256:'b3b589b46a629307f74b5e9c043b9b775f572b89030207b81cd982bda06a6a40'},
+ 'emir-barbershop-boys-and-salon-girls:en':{size:15745828,sha256:'a9d71b15efed769b72b5d094b9bc5ae489a15f766d49c6a3a1984ca438ad6f08'},
+ 'emir-meets-zachary:en':{size:16747082,sha256:'a35dcd79c4357fe79d658cd4a17884c38bb15bd95aeb16c3bd5619601690a2e5'}
 };
 const chunkSize=524288,maxBody=4*1048576;
 const pending=new Map();

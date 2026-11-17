@@ -187,10 +187,15 @@ const fileQuery=`
  FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug
  WHERE r.slug=$1 AND e.language=$2 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()
 `;
+// Editorial publication lock: technical upload approval is not final manuscript
+// approval. Emir Book Three is released only in English (owner approval
+// 2026-11-17), and only as that exact approved file; other languages stay locked.
+const editorialReleases={'emir-meets-zachary':{en:'a35dcd79c4357fe79d658cd4a17884c38bb15bd95aeb16c3bd5619601690a2e5'}};
+const editoriallyLocked=(slug,lang)=>Object.hasOwn(editorialReleases,slug)&&!editorialReleases[slug][lang];
 async function fileFor(pool,slug,lang){
- // Editorial publication lock: technical upload approval is not final manuscript approval.
- if(slug==='emir-meets-zachary')return null;
+ if(editoriallyLocked(slug,lang))return null;
  const stored=(await pool.query('SELECT size,sha256 FROM aom_storybook_files WHERE slug=$1 AND language=$2 AND approved_at IS NOT NULL',[slug,lang])).rows[0];
+ if(Object.hasOwn(editorialReleases,slug))return stored?.sha256===editorialReleases[slug][lang]?stored:undefined;
  if(stored)return stored;
  const q=await pool.query(`SELECT f.storage_key,f.sha256,octet_length(f.pdf_content) AS size
  FROM (${fileQuery}) edition JOIN aom_book_files f USING(storage_key,sha256)
@@ -225,7 +230,7 @@ async function languageEditions(pool,lang){
     WHERE e.language=$1 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()
    UNION SELECT r.slug FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug
     WHERE e.language=$1 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()`,
-  [lang,bundleSlug])).rows.map(x=>x.slug))].filter(slug=>isBundleBook(slug)&&slug!=='emir-meets-zachary');
+  [lang,bundleSlug])).rows.map(x=>x.slug))].filter(slug=>isBundleBook(slug)&&!editoriallyLocked(slug,lang));
  const books=[];
  for(const slug of candidates){
   const source=await fileFor(pool,slug,lang);
@@ -292,6 +297,7 @@ export function warmGiftArchives(pool){
  warmDone=job.catch(()=>null);
  return job;
 }
+export const forgetGiftInventory=()=>editionCache.clear();
 // After an approved edition changes: forget cached inventory and rebuild ZIPs.
 export function refreshGiftLibrary(pool){
  editionCache.clear();
@@ -460,6 +466,11 @@ export async function handleStorybook({req,res,url,pool,stripe}){
     'X-Content-Type-Options':'nosniff','Cache-Control':'public,max-age=3600'});
    res.end(bytes);return true;
   }
+  if(slug==='emir-meets-zachary'&&url.searchParams.get('language')==='en'){
+   const bytes=Buffer.from((await readFile(new URL('./approved-covers/emir-book3-en.jpg.b64',import.meta.url),'utf8')).trim(),'base64');
+   res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':bytes.length,'X-Content-Type-Options':'nosniff','Cache-Control':'public,max-age=3600'});
+   res.end(bytes);return true;
+  }
   if(!isBundleBook(slug)||slug==='emir-meets-zachary'||!giftArt[slug]){
    send(res,404,'Cover unavailable','text/plain');return true;
   }
@@ -481,7 +492,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
       JOIN (SELECT slug,language,COUNT(*) AS count,SUM(octet_length(bytes)) AS bytes
             FROM aom_storybook_pdf_parts GROUP BY slug,language) p
         ON p.slug=f.slug AND p.language=f.language
-     WHERE f.approved_at IS NOT NULL AND f.slug<>'emir-meets-zachary' AND p.bytes=f.size AND p.count=ceil(f.size::numeric/524288)
+     WHERE f.approved_at IS NOT NULL AND (f.slug<>'emir-meets-zachary' OR (f.language='en' AND f.sha256='a35dcd79c4357fe79d658cd4a17884c38bb15bd95aeb16c3bd5619601690a2e5')) AND p.bytes=f.size AND p.count=ceil(f.size::numeric/524288)
     UNION ALL
     SELECT r.slug,e.language,octet_length(b.pdf_content) AS size,e.sha256,'bundle' AS source
       FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug
