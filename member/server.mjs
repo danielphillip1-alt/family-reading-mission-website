@@ -20,6 +20,7 @@ import {handlePurchaseDelivery} from './instant-book.mjs';
 import {handleBarber} from './barber-gifts.mjs';
 import {handleStorybook,storybookSchema,warmGiftArchives} from './storybook-gifts.mjs';
 import {handleGiftPersonalization} from './gift-personalization.mjs';
+import {handleApprovedIntake} from './approved-intake.mjs';
 import {testFirstBookDelivery,testTranslatedBooksDelivery} from './delivery-smoke.mjs';
 
 
@@ -545,6 +546,7 @@ const server = createServer(async (req, res) => {
       }
     }
     if (!pool) return send(res, 503, page('Member setup pending', '<p>The membership database connection is temporarily unavailable.</p>'));
+    if (await handleApprovedIntake({req,res,url,pool})) return;
     if (await handleStorybook({req,res,url,stripe,pool})) return;
     if (await handleGiftPersonalization({req,res,url,stripe,pool})) return;
     if (await handleBarber({req,res,url,stripe,pool})) return;

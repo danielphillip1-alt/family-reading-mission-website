@@ -292,6 +292,11 @@ export function warmGiftArchives(pool){
  warmDone=job.catch(()=>null);
  return job;
 }
+// After an approved edition changes: forget cached inventory and rebuild ZIPs.
+export function refreshGiftLibrary(pool){
+ editionCache.clear();
+ return warmGiftArchives(pool).then(rows=>console.log('Private language ZIP cache refreshed:',JSON.stringify(rows))).catch(error=>console.error('ZIP refresh failed',error?.message||error?.name));
+}
 async function prepareAllArchives(pool){
  const status=[];
  for(const lang of Object.keys(languages)){
