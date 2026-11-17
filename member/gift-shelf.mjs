@@ -6,6 +6,7 @@ export const bundleBooks = [
  ['zachary-school-that-made-room','Zachary and the School That Made Room','Zachary und die Schule, die Platz machte','Zachary e a Escola que Abriu Espaço'],
  ['emir-boy-who-never-smiles','Emir and the Boy Who Never Smiles'],
  ['emir-barbershop-boys-and-salon-girls','Emir and the Barbershop Boys and Salon Girls'],
+ ['emir-meets-zachary','Emir Meets Zachary','Emir trifft Zachary'],
 ];
 export const isBundleBook = slug => /^(zachary|emir)-[a-z0-9-]{2,70}$/.test(slug||'');
 export const bundleTitle = (slug,lang) => {
@@ -41,7 +42,7 @@ footer{text-align:center;background:var(--forest);color:#ffe59d;padding:17px;fon
 @media(max-width:560px){.books{grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.book{padding:8px}.intro{padding:15px 12px}h2{font-size:1rem}.button{font-size:.83rem;padding:6px 9px}.cover{aspect-ratio:1/1.12}}
 `;
 export function shelfPage({lang,available,otherEditions,link,order}){
- const w=words[lang];
+ const w=words[lang]||words.en;
  const slugs=order||[...new Set([...bundleBooks.map(b=>b[0]),...available,...otherEditions])].filter(slug=>available.includes(slug)||otherEditions.includes(slug));
  const cards=slugs.map(slug=>{
   const title=escape(bundleTitle(slug,lang));
