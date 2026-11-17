@@ -214,7 +214,7 @@ languageButtons.forEach(button => button.addEventListener('click', () => selectL
 </script>
 <style id="free-reading-20261117">
 /* Free reading campaign: retain approved illustrations and show USD bundle value. */
-#join{margin-top:24px}#join .hero-plan{border:2px solid #ffd33d}
+#join{margin-top:24px;display:flex!important}#join .hero-plan{border:2px solid #ffd33d}
 #hero-nonexistent,.hero-plan-note,.hero .hero-inner [role="note"],.benefits,.closing,#share-books{display:none!important}
 .hero{background:radial-gradient(circle at 12% 22%,#1c8dc7 0,transparent 35%),radial-gradient(circle at 90% 35%,#ff9c28 0,transparent 35%),#063e5a}
 .hero-headline{font-family:Impact,'Arial Black',sans-serif!important;font-size:clamp(44px,7vw,94px)!important;line-height:1.07!important;text-shadow:4px 5px 0 #012b41}
@@ -233,9 +233,9 @@ languageButtons.forEach(button => button.addEventListener('click', () => selectL
 <script id="free-reading-pivot-20261117">
 (()=>{
  const copy={
- en:{head:'YOUR NEXT<br><em>ADVENTURE IS FREE!</em>',intro:'Amazing stories. Big adventures. Real book illustrations. Come explore our books — no purchase needed.',action:'EXPLORE THE BOOKS!',library:'Choose Your Next Adventure',detail:'Meet the characters, explore real book art and read our available pages for free.',sample:'READ FREE PAGES'},
- de:{head:'DEIN NÄCHSTES<br><em>ABENTEUER IST GRATIS!</em>',intro:'Tolle Geschichten, große Abenteuer und echte Bilder aus unseren Büchern. Kostenlos entdecken.',action:'BÜCHER ENTDECKEN!',library:'Wähle dein nächstes Abenteuer',detail:'Entdecke die Figuren, Bilder und unsere kostenlos verfügbaren Buchseiten.',sample:'GRATIS LESEN'},
- pt:{head:'A TUA PRÓXIMA<br><em>AVENTURA É GRÁTIS!</em>',intro:'Histórias incríveis, grandes aventuras e ilustrações dos nossos livros. Explora sem pagar.',action:'EXPLORAR OS LIVROS!',library:'Escolhe a tua próxima aventura',detail:'Descobre as personagens, as ilustrações e as páginas disponíveis gratuitamente.',sample:'LER GRÁTIS'}
+ en:{head:'12 BOOK ADVENTURES<br><em>VALUED AT $49.99</em>',intro:'Explore our children's books. The complete digital bundle is $49.99 USD. Our separate gift program gives books to children for free.',action:'EXPLORE THE BOOKS!',library:'Choose Your Next Adventure',detail:'Meet the characters, explore real book art and read our available pages for free.',sample:'READ FREE PAGES'},
+ de:{head:'12 BUCHABENTEUER<br><em>WERT: $49.99</em>',intro:'Entdecke unsere Kinderbücher. Das digitale Gesamtpaket kostet $49.99 USD. Über unser Geschenkprogramm erhalten Kinder Bücher kostenlos.',action:'BÜCHER ENTDECKEN!',library:'Wähle dein nächstes Abenteuer',detail:'Entdecke die Figuren, Bilder und unsere kostenlos verfügbaren Buchseiten.',sample:'GRATIS LESEN'},
+ pt:{head:'12 AVENTURAS EM LIVROS<br><em>VALOR: $49.99</em>',intro:'Explora os nossos livros infantis. O pacote digital completo custa $49.99 USD. O nosso programa de ofertas dá livros gratuitos às crianças.',action:'EXPLORAR OS LIVROS!',library:'Escolhe a tua próxima aventura',detail:'Descobre as personagens, as ilustrações e as páginas disponíveis gratuitamente.',sample:'LER GRÁTIS'}
  };
  const hero=document.querySelector('.hero-inner>div');
  const gallery=document.querySelector('#book-gallery');
