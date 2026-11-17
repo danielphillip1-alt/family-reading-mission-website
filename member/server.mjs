@@ -14,6 +14,7 @@ import {importBundleBooks} from './import-bundle-editions.mjs';
 import {importBookThree} from './import-book-three.mjs';
 import {importApprovedGermanEmir} from './import-approved-german-emir.mjs';
 import {auditApprovedBookEditions} from './audit-approved-editions.mjs';
+import {testLiveStorybookRoutes} from './live-storybook-smoke.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
 import {handleBarber} from './barber-gifts.mjs';
 import {handleStorybook,storybookSchema} from './storybook-gifts.mjs';
@@ -696,6 +697,8 @@ startupMigrations.then(async()=>{
   console.log('Zachary Book Three protected import:',JSON.stringify(thirdBook));
   const audit=await auditApprovedBookEditions(pool);
   console.log('AOM PDF byte integrity audit:',JSON.stringify(audit));
+  const giftQa=await testLiveStorybookRoutes(pool).catch(error=>({passed:false,error:error?.message||error?.code||'unknown'}));
+  console.log('AOM live gift reader and download QA:',JSON.stringify(giftQa));
   const result=await importApprovedBookOne(pool);
   if(result.imported){console.log('Approved customer Book One PDFs imported:',result.editions.join(','));await deliverDueBooks();}
   await testFirstBookDelivery(pool);
