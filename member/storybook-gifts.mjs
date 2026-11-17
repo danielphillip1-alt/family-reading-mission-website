@@ -430,6 +430,34 @@ export async function handleStorybook({req,res,url,pool,stripe}){
   const key=hash(gift);
   const row=(await pool.query('SELECT * FROM aom_storybook_claims WHERE token_hash=$1',[key])).rows[0];
   if(!row){send(res,404,page('Gift link unavailable','<p>Open the private link from your gift message.</p>'));return true;}
+  // A free gift's high-entropy private link authorizes the download:
+  // recipients select only a language and press Download.
+  const giftSource=(await pool.query(
+   'SELECT kind,expires_at FROM aom_storybook_sources WHERE source_hash=$1',[row.source_hash])).rows[0];
+  const freeGift=giftSource?.kind==='free'&&(!giftSource.expires_at||new Date(giftSource.expires_at)>new Date());
+  if(freeGift&&method==='GET'&&path==='/storybook/download-all'){
+   const selected=url.searchParams.get('language');
+   if(!Object.hasOwn(languages,selected)){send(res,400,'Choose a valid language','text/plain');return true;}
+   const slugs=await availableLanguageBooks(pool,selected);
+   if(!slugs.length){send(res,404,'No books in this language','text/plain');return true;}
+   try{await deliverAllBooks(pool,res,slugs,selected);}
+   catch(error){console.error('Free gift ZIP failed',error?.code||error?.name,error?.message||'');if(!res.headersSent)send(res,500,'Download unavailable','text/plain');else res.destroy();}
+   return true;
+  }
+  if(freeGift&&method==='GET'&&path==='/storybook/gift'){
+   const selected=url.searchParams.get('language');
+   const lang=Object.hasOwn(languages,selected)?selected:'en';
+   const formHtml='<form method="get" action="/storybook/download-all" class="aom-two-step">'
+    +'<input type="hidden" name="gift" value="'+gift+'">'
+    +'<label for="language">Language</label><select id="language" name="language" required>'+options(lang)+'</select>'
+    +'<button class="open" type="submit">Download</button></form>';
+   const html=(await template()).replace('<html lang="en">','<html lang="'+lang+'">')
+    .replace('%%RECIPIENT%%',()=>escape(displayName(row.recipient,'Friend')))
+    .replace('%%SENDER%%',()=>escape(displayName(row.sender,'Someone special')))
+    .replace('%%NOTICE%%','')
+    .replace('%%FORM%%',()=>formHtml);
+   send(res,200,html);return true;
+  }
   if(path==='/storybook/gift'&&method==='GET'){
    const wantedBook=url.searchParams.get('book');
    const bulkRequested=url.searchParams.get('download')==='all';
