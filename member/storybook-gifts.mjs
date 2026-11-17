@@ -170,8 +170,12 @@ async function deliverAllBooks(pool,res,slugs,lang){
    }
   }
  };
+ // Include the edition count and generation time so iOS Files never
+ // confuses an earlier archive with the latest complete download.
+ const filename='AOM_'+lang.replace(/[^a-z0-9-]/gi,'_')+'_'+books.length+'_Books_'+new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'.zip';
  res.writeHead(200,{...headers,'Content-Type':'application/zip',
-  'Content-Disposition':'attachment; filename="Authors_On_A_Mission_'+lang+'_Books.zip"'});
+  'Content-Disposition':'attachment; filename="'+filename+'"',
+  'X-AOM-Book-Count':String(books.length)});
  await streamBookZip({res,language:lang,books,readChunks});
 }
 
