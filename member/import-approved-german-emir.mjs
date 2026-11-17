@@ -34,16 +34,37 @@ export async function importApprovedGermanEmir(pool){
  }
  const packed=Buffer.from(base64,'base64');
  let pdf=null;
- for(const variable of ['AOM_BOOK_BLOB_KEY','AOM_EDITION_DECRYPT_KEY']){
+ for(const variable of ['AOM_BOOK_BLOB_KEY','AOM_EDITION_DECRYPT_KEY','AOM_STAGED_BOOK_KEY']){
   const hex=process.env[variable];
   if(!/^[0-9a-f]{64}$/i.test(hex||''))continue;
-  try {
-   const decipher=createDecipheriv('chacha20',Buffer.from(hex,'hex'),packed.subarray(0,16));
-   const candidate=Buffer.concat([decipher.update(packed.subarray(16)),decipher.final()]);
-   if(candidate.length===edition.size&&candidate.subarray(0,5).toString()==='%PDF-'&&digest(candidate)===edition.sha256){
-    pdf=candidate;break;
-   }
-  }catch{}
+  const key=Buffer.from(hex,'hex');
+  const candidates=[];
+  // The staged representation may use authenticated AES-GCM with a
+  // 12-byte IV and 16-byte tag; support both conventional tag positions.
+  if(packed.length===edition.size+28){
+   candidates.push({iv:packed.subarray(0,12),data:packed.subarray(12,-16),tag:packed.subarray(-16)});
+   candidates.push({iv:packed.subarray(0,12),data:packed.subarray(28),tag:packed.subarray(12,28)});
+  }
+  for(const item of candidates){
+   try{
+    const decipher=createDecipheriv('aes-256-gcm',key,item.iv);
+    decipher.setAuthTag(item.tag);
+    const candidate=Buffer.concat([decipher.update(item.data),decipher.final()]);
+    if(candidate.length===edition.size&&candidate.subarray(0,5).toString()==='%PDF-'&&digest(candidate)===edition.sha256){
+     pdf=candidate;break;
+    }
+   }catch{}
+  }
+  if(pdf)break;
+  if(packed.length===edition.size+16){
+   try{
+    const decipher=createDecipheriv('chacha20',key,packed.subarray(0,16));
+    const candidate=Buffer.concat([decipher.update(packed.subarray(16)),decipher.final()]);
+    if(candidate.length===edition.size&&candidate.subarray(0,5).toString()==='%PDF-'&&digest(candidate)===edition.sha256){
+     pdf=candidate;break;
+    }
+   }catch{}
+  }
  }
  if(!pdf)return {skipped:'staged German edition did not match exact approved PDF checksum'};
  const client=await pool.connect();
