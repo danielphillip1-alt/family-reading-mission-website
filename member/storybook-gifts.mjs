@@ -253,6 +253,10 @@ export async function handleStorybook({req,res,url,pool,stripe}){
   if(path.startsWith('/api/admin/storybook/')&&method==='POST'){
    const token=process.env.AOM_ADMIN_API_TOKEN;
    if(!token||!equal(req.headers.authorization||'','Bearer '+token)){send(res,403,'Forbidden','text/plain');return true;}
+   if(path==='/api/admin/storybook/status'){
+    const result=await pool.query('SELECT slug,language,size,approved_at IS NOT NULL AS approved FROM aom_storybook_files ORDER BY slug,language');
+    send(res,200,JSON.stringify({files:result.rows}),'application/json');return true;
+   }
    if(path==='/api/admin/storybook/pdf'){await uploadPdf(req,res,url,pool);return true;}
    const data=await form(req);
    if(path==='/api/admin/storybook/issue'){
