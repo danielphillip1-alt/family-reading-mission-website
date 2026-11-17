@@ -7,6 +7,7 @@ import {giftArt} from './gift-shelf-art.mjs';
 import {storybookAdminPage} from './storybook-admin.mjs';
 import {shelfPage,isBundleBook,bundleTitle} from './gift-shelf.mjs';
 import {streamBookZip,bookZipByteLength,bookZipOrder} from './zip-library.mjs';
+import {privateZipFile,streamCachedZip} from './private-zip-cache.mjs';
 
 const SITE='https://theauthorsmission.de';
 const languages={en:'English','pt-PT':'Português',de:'Deutsch',tr:'Türkçe',fr:'Français',es:'Español'};
@@ -137,47 +138,65 @@ async function deliverFile(pool,res,slug,lang,inline){
  res.end();
 }
 
-async function deliverAllBooks(pool,res,slugs,lang){
+async function prepareLanguageArchive(pool,slugs,lang){
  const books=[];
  for(const slug of [...slugs].sort((a,b)=>bookZipOrder(a)-bookZipOrder(b))){
   const source=await fileFor(pool,slug,lang);
   if(!source)throw Error('A requested edition is unavailable');
   books.push({...source,slug,size:Number(source.size)});
  }
- const readChunks=async function*(book){
-  // Batch bounded-size reads: each PDF uses only a handful of database round-trips.
-  const batchParts=16;
-  if(book.storage_key){
-   for(let offset=1;offset<=book.size;offset+=chunkSize*batchParts){
-    const row=(await pool.query(
-     'SELECT substring(pdf_content FROM $3 FOR $4) AS bytes FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',
-     [book.storage_key,book.sha256,offset,chunkSize*batchParts])).rows[0];
-    if(!row?.bytes?.length)throw Error('Missing archive PDF bytes');
-    for(let pos=0;pos<row.bytes.length;pos+=chunkSize)yield row.bytes.subarray(pos,pos+chunkSize);
-   }
-  }else{
-   const count=Math.ceil(book.size/chunkSize);
-   for(let part=0;part<count;part+=batchParts){
-    const result=await pool.query(
-     'SELECT part,bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 AND part >=$3 AND part<$4 ORDER BY part',
-     [book.slug,lang,part,Math.min(count,part+batchParts)]);
-    if(result.rows.length!==Math.min(batchParts,count-part))throw Error('Archive edition is incomplete');
-    for(let i=0;i<result.rows.length;i++){
-     const row=result.rows[i];
-     if(row.part!==part+i||!row.bytes?.length)throw Error('Archive PDF chunks are incomplete');
-     yield row.bytes;
+ if(!books.length)throw Error('No approved books in requested language');
+ const size=bookZipByteLength(books,lang);
+ const signature=JSON.stringify([lang,books.map(b=>[b.slug,b.size,b.sha256])]);
+ const filename=await privateZipFile(signature,size,async res=>{
+  const readChunks=async function*(book){
+   const batchParts=16;
+   if(book.storage_key){
+    for(let offset=1;offset<=book.size;offset+=chunkSize*batchParts){
+     const row=(await pool.query(
+      'SELECT substring(pdf_content FROM $3 FOR $4) AS bytes FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',
+      [book.storage_key,book.sha256,offset,chunkSize*batchParts])).rows[0];
+     if(!row?.bytes?.length)throw Error('Missing archive PDF bytes');
+     for(let pos=0;pos<row.bytes.length;pos+=chunkSize)yield row.bytes.subarray(pos,pos+chunkSize);
+    }
+   }else{
+    const count=Math.ceil(book.size/chunkSize);
+    for(let part=0;part<count;part+=batchParts){
+     const result=await pool.query(
+      'SELECT part,bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 AND part >=$3 AND part<$4 ORDER BY part',
+      [book.slug,lang,part,Math.min(count,part+batchParts)]);
+     if(result.rows.length!==Math.min(batchParts,count-part))throw Error('Archive edition is incomplete');
+     for(let i=0;i<result.rows.length;i++){
+      const row=result.rows[i];
+      if(row.part!==part+i||!row.bytes?.length)throw Error('Archive PDF chunks are incomplete');
+      yield row.bytes;
+     }
     }
    }
+  };
+  await streamBookZip({res,language:lang,books,readChunks});
+ });
+ return {filename,size,count:books.length};
+}
+export async function warmGiftArchives(pool){
+ const status=[];
+ for(const lang of Object.keys(languages)){
+  const slugs=await availableLanguageBooks(pool,lang);
+  if(slugs.length){
+   const archive=await prepareLanguageArchive(pool,slugs,lang);
+   status.push({language:lang,count:archive.count,size:archive.size});
   }
- };
- // Include the edition count and generation time so iOS Files never
- // confuses an earlier archive with the latest complete download.
- const filename='AOM_'+lang.replace(/[^a-z0-9-]/gi,'_')+'_'+books.length+'_Books_'+new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'.zip';
+ }
+ return status;
+}
+async function deliverAllBooks(pool,res,slugs,lang){
+ const archive=await prepareLanguageArchive(pool,slugs,lang);
+ const filename='AOM_'+lang.replace(/[^a-z0-9-]/gi,'_')+'_'+archive.count+'_Books_'+new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'.zip';
  res.writeHead(200,{...headers,'Content-Type':'application/zip',
-  'Content-Length':bookZipByteLength(books,lang),
+  'Content-Length':archive.size,
   'Content-Disposition':'attachment; filename="'+filename+'"',
-  'X-AOM-Book-Count':String(books.length)});
- await streamBookZip({res,language:lang,books,readChunks});
+  'X-AOM-Book-Count':String(archive.count)});
+ await streamCachedZip(archive.filename,res);
 }
 
 // The gifted library is a directory of individually approved, fully stored PDFs.
