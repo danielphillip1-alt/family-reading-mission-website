@@ -13,6 +13,7 @@ import {importApprovedBookOne} from './import-approved-books.mjs';
 import {importBundleBooks} from './import-bundle-editions.mjs';
 import {importBookThree} from './import-book-three.mjs';
 import {importApprovedGermanEmir} from './import-approved-german-emir.mjs';
+import {restoreZacharyGermanOriginal} from './restore-zachary-german-original.mjs';
 import {auditApprovedBookEditions} from './audit-approved-editions.mjs';
 import {testLiveStorybookRoutes} from './live-storybook-smoke.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
@@ -676,6 +677,8 @@ startupMigrations.then(async()=>{
  try{
   const germanEmirImport=await importApprovedGermanEmir(pool).catch(error=>({error:error?.code||error?.message}));
   console.log('German Emir approved book import:',JSON.stringify(germanEmirImport));
+  const restoredZachary=await restoreZacharyGermanOriginal(pool);
+  console.log('German Zachary original PDF restoration:',JSON.stringify(restoredZachary));
   const bundleImport=await importBundleBooks(pool);
   if(bundleImport.imported) console.log('Private bundle book editions imported:',bundleImport.count);
   void warmGiftArchives(pool).then(rows=>console.log('Private language ZIP cache ready:',JSON.stringify(rows))).catch(err=>console.error('Private ZIP prewarm failed:',err?.message||err?.name));
