@@ -19,6 +19,8 @@ const escape = value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt
 const translatedTitles={
  fr:{
  'zachary-my-unique-hat-2026-11':'Zachary et la casquette «My Unique»',
+ 'zachary-school-that-believed-in-him':'Zachary et l’école qui a cru en lui',
+ 'zachary-school-that-made-room':'Zachary et l’école qui a fait de la place',
  'zachary-biggest-lesson-yet':'Zachary et la plus grande leçon',
  'emir-boy-who-never-smiles':'Emir et le garçon qui ne souriait jamais',
  'emir-barbershop-boys-and-salon-girls':'Emir et les garçons du salon de coiffure et les filles du salon',
@@ -26,6 +28,8 @@ const translatedTitles={
  },
  es:{
  'zachary-my-unique-hat-2026-11':'Zachary y la gorra «My Unique»',
+ 'zachary-school-that-believed-in-him':'Zachary y la escuela que creyó en él',
+ 'zachary-school-that-made-room':'Zachary y la escuela que abrió espacio',
  'zachary-biggest-lesson-yet':'Zachary y la lección más grande',
  'emir-boy-who-never-smiles':'Emir y el niño que nunca sonríe',
  'emir-barbershop-boys-and-salon-girls':'Emir y los chicos de la barbería y las chicas del salón',
@@ -33,6 +37,8 @@ const translatedTitles={
  },
  tr:{
  'zachary-my-unique-hat-2026-11':'Zachary ve “My Unique” Şapkası',
+ 'zachary-school-that-believed-in-him':'Zachary ve Ona İnanan Okul',
+ 'zachary-school-that-made-room':'Zachary ve Herkese Yer Açan Okul',
  'zachary-biggest-lesson-yet':'Zachary ve En Büyük Ders',
  'emir-boy-who-never-smiles':'Emir ve Hiç Gülümsemeyen Çocuk',
  'emir-barbershop-boys-and-salon-girls':'Emir ve Berber Dükkânının Çocukları ve Kuaför Salonunun Kızları',

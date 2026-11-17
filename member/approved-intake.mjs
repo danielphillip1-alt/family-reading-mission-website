@@ -32,8 +32,14 @@ const approved={
  'zachary-biggest-lesson-yet:de':{size:22783762,sha256:'66ff234b31c9b9e9e880c8893b38339c08be1a8e65f623f29a6528b31dfc43e0'},
  'zachary-biggest-lesson-yet:pt-PT':{size:22772405,sha256:'628830a783297684357128bf759b73e33d942bb23b1cf28dada9d4287183854c'},
  // Zachary Book Four translated into French and Turkish.
- 'zachary-biggest-lesson-yet:fr':{size:22784166,sha256:'f5ee68533b8b8595e86b9ecaa12bcd7af547131139be8a5683d6b63eb28cbad9'},
- 'zachary-biggest-lesson-yet:tr':{size:22782204,sha256:'c902f1cc97c9761daad782e47fb21a2132843bb95a920e544df9d099f098cd30'}
+ 'zachary-biggest-lesson-yet:fr':{size:22784164,sha256:'4228bd1329e41a91f662ce43947bcf0165d7b51281f236f1136172fbba04fe00'},
+ 'zachary-biggest-lesson-yet:tr':{size:22782204,sha256:'c902f1cc97c9761daad782e47fb21a2132843bb95a920e544df9d099f098cd30'},
+ 'zachary-school-that-believed-in-him:es':{size:12917683,sha256:'30c7da0a9f3f9bfbe24102c27d57219fc0b1f79fa69da936c2ebe3f4ed4948cf'},
+ 'zachary-school-that-believed-in-him:fr':{size:12913716,sha256:'14aade1f21c637c832148413b51549341b5ac79460506abddb4d59704dd8dc26'},
+ 'zachary-school-that-believed-in-him:tr':{size:12912538,sha256:'a10507e877fe78945e478cbf1eca2b16bbeddd8b5087507bf8d6f058cdc45593'},
+ 'zachary-school-that-made-room:es':{size:24322631,sha256:'e2c5186f1c37d015a88c3491f749bbb796f1b57e3586845cd97871479fd2a96b'},
+ 'zachary-school-that-made-room:fr':{size:24325244,sha256:'c7feaadb215fb44e6cacc6e0165171b38c867bdb6a3cf420bb18fc4ebca876e8'},
+ 'zachary-school-that-made-room:tr':{size:24324941,sha256:'0764bb9c594e57fd09a4ba97cca88ff980c5fac01f1a4ef68c5b04fc14e3f625'}
 };
 const chunkSize=524288,maxBody=4*1048576;
 const pending=new Map();
