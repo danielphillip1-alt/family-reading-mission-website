@@ -13,7 +13,8 @@ const approved={
  'emir-boy-who-never-smiles:en':{size:16217672,sha256:'b3b589b46a629307f74b5e9c043b9b775f572b89030207b81cd982bda06a6a40'},
  'emir-barbershop-boys-and-salon-girls:en':{size:15745828,sha256:'a9d71b15efed769b72b5d094b9bc5ae489a15f766d49c6a3a1984ca438ad6f08'},
  'emir-meets-zachary:en':{size:16747082,sha256:'a35dcd79c4357fe79d658cd4a17884c38bb15bd95aeb16c3bd5619601690a2e5'},
- 'emir-meets-zachary:es':{size:17869805,sha256:'dac7f72239bbca376d3a4622f4244c7780263db6d5a5ac779e5509dc56d530cf'}
+ 'emir-meets-zachary:es':{size:17869805,sha256:'dac7f72239bbca376d3a4622f4244c7780263db6d5a5ac779e5509dc56d530cf'},
+ 'emir-meets-zachary:de':{size:17870102,sha256:'e2be47f81ee400fd22b8d363b364c3aa6d830aaed5c204449204541654d911e2'}
 };
 const chunkSize=524288,maxBody=4*1048576;
 const pending=new Map();

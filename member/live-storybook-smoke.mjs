@@ -57,7 +57,7 @@ async function testBarberGiftDownload(pool){
   timings[lang]={books:entries.length,bytes:body.length,firstByteMs:Math.round(firstByte),totalMs:Math.round(total),source:zip.headers.get('x-aom-archive-source'),entries};
  }
  const de=timings.de.entries;
- if(de.length!==5||!de.some(e=>e.entry.startsWith('02_Emir_Series/'))||!de.some(e=>e.size===14389311&&e.sha256==='ec7acc227dad7ab3d92893887e96e7d1bcaf80a468779bbbb71e7f017f63a52d'))
+ if(de.length!==6||!de.some(e=>e.entry==='02_Emir_Series/03_Emir_Book_3_Meets_Zachary_de.pdf')||!de.some(e=>e.entry.startsWith('02_Emir_Series/'))||!de.some(e=>e.size===14389311&&e.sha256==='ec7acc227dad7ab3d92893887e96e7d1bcaf80a468779bbbb71e7f017f63a52d'))
   fail('German barber ZIP is missing Emir books or the original Book One');
  const qrGift={};
  for(const lang of ['en','de','fr','es','tr','pt-PT']){
@@ -83,7 +83,7 @@ async function runLiveStorybookRoutes(pool,secret){
  if(catalogResponse.status!==200)fail('Catalog returned '+catalogResponse.status);
  const catalog=await catalogResponse.json();
  const all=catalog.editions||[];
- if(all.some(x=>x.slug==='emir-meets-zachary'&&!['en','es'].includes(x.language)))fail('Unapproved Emir Book Three language appeared in public catalog');
+ if(all.some(x=>x.slug==='emir-meets-zachary'&&!['en','es','de'].includes(x.language)))fail('Unapproved Emir Book Three language appeared in public catalog');
  const groups=Object.fromEntries(codes.map(lang=>[lang,all.filter(x=>x.language===lang)]));
  const source=sha('automated-book-audit:'+randomBytes(32).toString('hex'));
  const pairs=[];
@@ -111,7 +111,7 @@ async function runLiveStorybookRoutes(pool,secret){
    const headers={Cookie:cookie};
    const shelf=await request('/storybook/shelf?gift='+token,{headers});
    const html=await shelf.text();
-   if(shelf.status!==200||!html.includes('class="books"')||(!['en','es'].includes(lang)&&html.includes('slug=emir-meets-zachary')))fail('Incorrect language shelf '+lang);
+   if(shelf.status!==200||!html.includes('class="books"')||(!['en','es','de'].includes(lang)&&html.includes('slug=emir-meets-zachary')))fail('Incorrect language shelf '+lang);
    const zipped=await request('/storybook/download-all?gift='+token,{headers});
    if(zipped.status!==200||!zipped.headers.get('content-type')?.includes('application/zip'))fail('Download All failed: '+lang+' HTTP '+zipped.status);
    const zip=Buffer.from(await zipped.arrayBuffer());
