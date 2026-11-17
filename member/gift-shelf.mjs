@@ -8,9 +8,9 @@ export const bundleBooks = [
  ['zachary-biggest-lesson-yet','Zachary and the Biggest Lesson Yet','Zachary und die größte Lektion','Zachary e a Maior Lição'],
  ['zachary-foundation-of-something-great','Zachary and the Foundation of Something Great','Zachary und das Fundament für etwas Großes','Zachary e os Alicerces de Algo Grandioso'],
  ['zachary-night-everyone-belonged','Zachary and the Night Everyone Belonged','Zachary und die Nacht, in der alle dazugehörten','Zachary e a Noite em que Todos Pertenceram'],
- ['emir-boy-who-never-smiles','Emir and the Boy Who Never Smiles'],
- ['emir-barbershop-boys-and-salon-girls','Emir and the Barbershop Boys and Salon Girls'],
- ['emir-meets-zachary','Emir Meets Zachary','Emir trifft Zachary'],
+ ['emir-boy-who-never-smiles','Emir and the Boy Who Never Smiles','Emir und der Junge, der niemals lächelt','Emir e o Rapaz Que Nunca Sorria'],
+ ['emir-barbershop-boys-and-salon-girls','Emir and the Barbershop Boys and Salon Girls','Emir und die Barbershop-Jungs und Salon-Mädchen','Emir e os Rapazes da Barbearia e as Raparigas do Salão'],
+ ['emir-meets-zachary','Emir Meets Zachary','Emir trifft Zachary','Emir Conhece Zachary'],
 ];
 export const isBundleBook = slug => /^(zachary|emir)-[a-z0-9-]{2,70}$/.test(slug||'');
 export const bundleTitle = (slug,lang) => {

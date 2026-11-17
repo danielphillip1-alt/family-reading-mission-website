@@ -16,7 +16,7 @@ async function call(f,method,path,body){
 }
 test('only the exact approved editions can be uploaded',async()=>{
  const f=fixture();
- assert.equal((await call(f,'POST','/api/storybook/approved-intake?slug=emir-meets-zachary&language=pt-PT&offset=0',Buffer.from('%PDF-'))).status,404);
+ assert.equal((await call(f,'POST','/api/storybook/approved-intake?slug=emir-meets-zachary&language=it&offset=0',Buffer.from('%PDF-'))).status,404);
  assert.equal((await call(f,'POST','/api/storybook/approved-intake?slug=zachary-my-unique-hat-2026-11&language=en&offset=5',Buffer.from('x'))).status,409);
 });
 test('a file with the right size but different bytes is rejected without touching the database',async()=>{

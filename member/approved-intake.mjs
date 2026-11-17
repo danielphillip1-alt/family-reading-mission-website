@@ -51,7 +51,10 @@ const approved={
  'zachary-night-everyone-belonged:fr':{size:28259028,sha256:'6f4c210fa5bb5844ebc8f9536e32da3cebcfe33a4a3ca1c0cab474fc2f1f4449'},
  'zachary-night-everyone-belonged:de':{size:28265758,sha256:'745e5df235cad372802762fb51bd0570b7fd6a987e984e84fc744411658ec91b'},
  'zachary-night-everyone-belonged:pt-PT':{size:28261193,sha256:'dafa85452ae7aba8e2f1130242308c2703191124ad598e9927681ce2ee84be22'},
- 'zachary-night-everyone-belonged:tr':{size:28262407,sha256:'918f557d7cf6f750ebc3668853c18aac08ef4e8e460fc8168156868ed1bc5163'}
+ 'zachary-night-everyone-belonged:tr':{size:28262407,sha256:'918f557d7cf6f750ebc3668853c18aac08ef4e8e460fc8168156868ed1bc5163'},
+ 'emir-boy-who-never-smiles:pt-PT':{size:16577364,sha256:'7efc9a748296c06bb243ef67302f4b957eedbc37e0faaab94786a28b2c0494ab'},
+ 'emir-barbershop-boys-and-salon-girls:pt-PT':{size:16575707,sha256:'bba681560b988ee298b0b519491c4445c6a6f6296f38c16120d98e892df1900c'},
+ 'emir-meets-zachary:pt-PT':{size:12795275,sha256:'908265b616e6fe3eeeb6fb64527f6ac5c23089a309355b7ec7e63ab77fb08be2'}
 };
 const chunkSize=524288,maxBody=4*1048576;
 const pending=new Map();

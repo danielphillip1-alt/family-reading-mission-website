@@ -192,7 +192,7 @@ const fileQuery=`
 // approval. Emir Book Three is released in English, Spanish, German, Turkish and
 // French (owner approvals 2026-11-17), each only as that exact approved file;
 // any other file or language (e.g. an old stored draft) stays locked.
-const editorialReleases={'emir-meets-zachary':{en:'a35dcd79c4357fe79d658cd4a17884c38bb15bd95aeb16c3bd5619601690a2e5',es:'dac7f72239bbca376d3a4622f4244c7780263db6d5a5ac779e5509dc56d530cf',de:'e2be47f81ee400fd22b8d363b364c3aa6d830aaed5c204449204541654d911e2',tr:'02ba124bd4652e48237899804ac334725f241b3e7a9eb8c7cfc63bfd8ac23cee',fr:'bb8f305fe3d6429d9abad1d0ab2dd26620eb3bc80cf09528771f369606196dd2'}};
+const editorialReleases={'emir-meets-zachary':{en:'a35dcd79c4357fe79d658cd4a17884c38bb15bd95aeb16c3bd5619601690a2e5',es:'dac7f72239bbca376d3a4622f4244c7780263db6d5a5ac779e5509dc56d530cf',de:'e2be47f81ee400fd22b8d363b364c3aa6d830aaed5c204449204541654d911e2',tr:'02ba124bd4652e48237899804ac334725f241b3e7a9eb8c7cfc63bfd8ac23cee',fr:'bb8f305fe3d6429d9abad1d0ab2dd26620eb3bc80cf09528771f369606196dd2','pt-PT':'908265b616e6fe3eeeb6fb64527f6ac5c23089a309355b7ec7e63ab77fb08be2'}};
 const releasedBookThree=Object.entries(editorialReleases['emir-meets-zachary']).map(([l,s])=>"('"+l+"','"+s+"')").join(',');
 const editoriallyLocked=(slug,lang)=>Object.hasOwn(editorialReleases,slug)&&!editorialReleases[slug][lang];
 async function fileFor(pool,slug,lang){
