@@ -12,6 +12,7 @@ import {importApprovedBookOne} from './import-approved-books.mjs';
 
 import {importBundleBooks} from './import-bundle-editions.mjs';
 import {importBookThree} from './import-book-three.mjs';
+import {importApprovedGermanEmir} from './import-approved-german-emir.mjs';
 import {handlePurchaseDelivery} from './instant-book.mjs';
 import {handleBarber} from './barber-gifts.mjs';
 import {handleStorybook,storybookSchema} from './storybook-gifts.mjs';
@@ -671,6 +672,8 @@ setTimeout(deliverDueBooks, 5_000).unref();
 startupMigrations.then(async()=>{
  if(!schemaReady)return;
  try{
+  const germanEmirImport=await importApprovedGermanEmir(pool).catch(error=>({error:error?.code||error?.message}));
+  console.log('German Emir approved book import:',JSON.stringify(germanEmirImport));
   const bundleImport=await importBundleBooks(pool);
   if(bundleImport.imported) console.log('Private bundle book editions imported:',bundleImport.count);
   const thirdBook=await importBookThree(pool);
