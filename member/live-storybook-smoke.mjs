@@ -1,4 +1,5 @@
 import {createHash,createHmac,randomBytes} from 'node:crypto';
+import {bookZipName} from './zip-library.mjs';
 
 // Authorized, transaction-free ephemeral audit users. No checkout, mail,
 // external recipient, or permanent customer access is created.
@@ -53,6 +54,7 @@ export async function testLiveStorybookRoutes(pool){
    if(zip.length<22||zip.readUInt32LE(zip.length-22)!==0x06054b50)fail('Download All is not a complete ZIP: '+lang);
    const number=zip.readUInt16LE(zip.length-22+10);
    if(number!==rows.length)fail('ZIP contains incorrect number of books: '+lang);
+   if(Number(zipped.headers.get('content-length'))!==zip.length)fail('ZIP advertised length mismatch: '+lang);
    let central=zip.readUInt32LE(zip.length-22+16);
    const seen=new Set();
    for(let i=0;i<number;i++){
@@ -62,7 +64,7 @@ export async function testLiveStorybookRoutes(pool){
     const entrySize=zip.readUInt32LE(central+24),offset=zip.readUInt32LE(central+42);
     if(zip.readUInt32LE(offset)!==0x04034b50)fail('ZIP entry corrupt: '+fname);
     const dataStart=offset+30+zip.readUInt16LE(offset+26)+zip.readUInt16LE(offset+28);
-    const item=rows.find(x=>fname===x.slug+'-'+lang+'.pdf');
+    const item=rows.find(x=>fname===bookZipName(x.slug,lang));
     if(!item||seen.has(fname)||entrySize!==item.size||sha(zip.subarray(dataStart,dataStart+entrySize))!==item.sha256)
      fail('ZIP edition integrity failure: '+fname);
     seen.add(fname);
