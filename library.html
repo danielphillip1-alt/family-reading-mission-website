@@ -117,7 +117,7 @@ function render(){
  message.textContent=loaded?(valid.length?labels[language].title+' · '+valid.length+' books':labels[language].empty):'Loading available books…';
  for(const item of valid){
   const card=document.createElement('article');card.className='book';
-  const cover=document.createElement('img');cover.src=backend+'/storybook/cover?slug='+encodeURIComponent(item.slug);cover.alt=titles[item.slug][language]+' — original book cover';cover.loading='lazy';
+  const cover=document.createElement('img');cover.src=backend+'/storybook/cover?slug='+encodeURIComponent(item.slug)+'&language='+encodeURIComponent(language);cover.alt=titles[item.slug][language]+' — original book cover';cover.loading='lazy';
   const title=document.createElement('h2');title.textContent=titles[item.slug][language];
   const badge=document.createElement('span');badge.className='edition';const part=sequence[item.slug];badge.textContent=part?part[0]+' · Book '+part[1]+' · '+labels[language].edition:labels[language].edition;
   const open=document.createElement('button');open.className='book-action';open.type='button';open.textContent='Open / Download';
