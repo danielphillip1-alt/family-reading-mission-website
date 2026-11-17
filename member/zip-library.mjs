@@ -24,7 +24,7 @@ export async function streamBookZip({res,language,books,readChunks}){
  const directories=[];
  for(const book of books){
   const name=book.slug+'-'+language+'.pdf';
-  if(!/^[a-z0-9-]+\.pdf$/.test(name))throw Error('Invalid archive entry');
+  if(!/^[a-z0-9-]+\.pdf$/i.test(name))throw Error('Invalid archive entry');
   const nameBytes=encode(name);
   const offset=position;
   const header=Buffer.alloc(30);
