@@ -8,6 +8,7 @@ import {storybookAdminPage} from './storybook-admin.mjs';
 import {shelfPage,isBundleBook,bundleTitle} from './gift-shelf.mjs';
 import {streamBookZip,bookZipByteLength,bookZipOrder,bookZipName} from './zip-library.mjs';
 import {privateZipFile,streamCachedZip,cachedZipFile} from './private-zip-cache.mjs';
+import {coverFile} from './approved-covers.mjs';
 
 const SITE='https://theauthorsmission.de';
 const languages={en:'English','pt-PT':'Português',de:'Deutsch',tr:'Türkçe',fr:'Français',es:'Español'};
@@ -460,22 +461,11 @@ export async function handleStorybook({req,res,url,pool,stripe}){
  }
  if(path==='/storybook/cover'&&method==='GET'){
   const slug=url.searchParams.get('slug');
-  if(slug==='zachary-my-unique-hat-2026-11'&&url.searchParams.get('language')==='de'){
-   const encoded=await readFile(new URL('./approved-covers/zachary-book1-de.jpg.b64',import.meta.url),'utf8');
-   const bytes=Buffer.from(encoded.trim(),'base64');
-   if(bytes.length<100000||bytes[0]!==0xff||bytes[1]!==0xd8){send(res,503,'Cover temporarily unavailable','text/plain');return true;}
-   res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':bytes.length,
-    'X-Content-Type-Options':'nosniff','Cache-Control':'public,max-age=3600'});
-   res.end(bytes);return true;
-  }
   const coverLang=url.searchParams.get('language');
-  if(slug==='emir-meets-zachary'&&['en','es','de','tr','fr'].includes(coverLang)&&!editoriallyLocked(slug,coverLang)){
-   const bytes=Buffer.from((await readFile(new URL('./approved-covers/emir-book3-'+coverLang+'.jpg.b64',import.meta.url),'utf8')).trim(),'base64');
-   res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':bytes.length,'X-Content-Type-Options':'nosniff','Cache-Control':'public,max-age=3600'});
-   res.end(bytes);return true;
-  }
-  if(slug==='zachary-biggest-lesson-yet'&&coverLang==='en'){
-   const bytes=Buffer.from((await readFile(new URL('./approved-covers/zachary-book4-en.jpg.b64',import.meta.url),'utf8')).trim(),'base64');
+  const approved=coverFile(slug,coverLang);
+  if(approved&&!editoriallyLocked(slug,coverLang)){
+   const bytes=Buffer.from((await readFile(new URL('./approved-covers/'+approved+'.jpg.b64',import.meta.url),'utf8')).trim(),'base64');
+   if(bytes.length<1000||bytes[0]!==0xff||bytes[1]!==0xd8){send(res,503,'Cover temporarily unavailable','text/plain');return true;}
    res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':bytes.length,'X-Content-Type-Options':'nosniff','Cache-Control':'public,max-age=3600'});
    res.end(bytes);return true;
   }

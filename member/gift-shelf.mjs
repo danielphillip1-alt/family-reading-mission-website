@@ -1,10 +1,11 @@
 import {giftArt} from './gift-shelf-art.mjs';
+import {coverFile} from './approved-covers.mjs';
 
 export const bundleBooks = [
  ['zachary-my-unique-hat-2026-11','Zachary and the “My Unique” Hat','Zachary und der „My Unique“-Hut','Zachary e o Chapéu My Unique'],
  ['zachary-school-that-believed-in-him','Zachary and the School That Believed in Him','Zachary und die Schule, die an ihn glaubte','Zachary e a Escola que Acreditou Nele'],
  ['zachary-school-that-made-room','Zachary and the School That Made Room','Zachary und die Schule, die Platz machte','Zachary e a Escola que Abriu Espaço'],
- ['zachary-biggest-lesson-yet','Zachary and the Biggest Lesson Yet'],
+ ['zachary-biggest-lesson-yet','Zachary and the Biggest Lesson Yet','Zachary und die größte Lektion','Zachary e a Maior Lição'],
  ['emir-boy-who-never-smiles','Emir and the Boy Who Never Smiles'],
  ['emir-barbershop-boys-and-salon-girls','Emir and the Barbershop Boys and Salon Girls'],
  ['emir-meets-zachary','Emir Meets Zachary','Emir trifft Zachary'],
@@ -17,16 +18,20 @@ export const bundleTitle = (slug,lang) => {
 const escape = value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const translatedTitles={
  fr:{
+ 'zachary-my-unique-hat-2026-11':'Zachary et la casquette «My Unique»',
  'emir-boy-who-never-smiles':'Emir et le garçon qui ne souriait jamais',
  'emir-barbershop-boys-and-salon-girls':'Emir et les garçons du salon de coiffure et les filles du salon',
  'emir-meets-zachary':'Emir rencontre Zachary'
  },
  es:{
+ 'zachary-my-unique-hat-2026-11':'Zachary y la gorra «My Unique»',
+ 'zachary-biggest-lesson-yet':'Zachary y la lección más grande',
  'emir-boy-who-never-smiles':'Emir y el niño que nunca sonríe',
  'emir-barbershop-boys-and-salon-girls':'Emir y los chicos de la barbería y las chicas del salón',
  'emir-meets-zachary':'Emir conoce a Zachary'
  },
  tr:{
+ 'zachary-my-unique-hat-2026-11':'Zachary ve “My Unique” Şapkası',
  'emir-boy-who-never-smiles':'Emir ve Hiç Gülümsemeyen Çocuk',
  'emir-barbershop-boys-and-salon-girls':'Emir ve Berber Dükkânının Çocukları ve Kuaför Salonunun Kızları',
  'emir-meets-zachary':'Emir Zachary ile Tanışıyor'
@@ -78,9 +83,7 @@ export function shelfPage({lang,available,otherEditions,link,order}){
   const localizedTitle=translatedTitles[lang]?.[slug]||bundleTitle(slug,lang);
   const title=escape(localizedTitle);
   const art=giftArt[lang+':'+slug]||giftArt[slug];
-  const originalGermanCover=lang==='de'&&slug==='zachary-my-unique-hat-2026-11';
-  const approvedCover=(slug==='emir-meets-zachary'&&['en','es','de','tr','fr'].includes(lang))||(slug==='zachary-biggest-lesson-yet'&&lang==='en');
-  const cover=approvedCover?'<img src="/storybook/cover?slug='+slug+'&amp;language='+lang+'" alt="'+title+'">':originalGermanCover?'<img src="/storybook/cover?slug=zachary-my-unique-hat-2026-11&amp;language=de" alt="Original German cover">'
+  const cover=coverFile(slug,lang)?'<img src="/storybook/cover?slug='+slug+'&amp;language='+encodeURIComponent(lang)+'" alt="'+title+'">'
    :art?'<img src="'+art+'" alt="">':'<span class="placeholder">'+title+'</span>';
   const actions=available.includes(slug)?'<a class="button" href="'+escape(link('reader',slug))+'" aria-label="'+escape(w.read+' – '+bundleTitle(slug,lang))+'">'+w.read+'</a> <a class="button secondary" href="'+escape(link('reader-pdf',slug))+'" aria-label="'+escape(w.download+' – '+bundleTitle(slug,lang))+'">'+w.download+'</a>':'<span>'+w.missing+'</span>';
   const order=readingOrder[slug]||[slug.startsWith('emir-')?'Emir':'Zachary',0];
