@@ -30,7 +30,10 @@ const approved={
  'zachary-my-unique-hat-2026-11:tr':{size:10396319,sha256:'233b67bdcc03bd214721850d39d567a5cbac9ab9a6f7ebb6c8312f83032f2530'},
  'zachary-biggest-lesson-yet:es':{size:22781265,sha256:'4a5c86c722c56e301c5e73ab46b85ae59d78cc3bc85e642431c717a1adca609e'},
  'zachary-biggest-lesson-yet:de':{size:22783762,sha256:'66ff234b31c9b9e9e880c8893b38339c08be1a8e65f623f29a6528b31dfc43e0'},
- 'zachary-biggest-lesson-yet:pt-PT':{size:22772405,sha256:'628830a783297684357128bf759b73e33d942bb23b1cf28dada9d4287183854c'}
+ 'zachary-biggest-lesson-yet:pt-PT':{size:22772405,sha256:'628830a783297684357128bf759b73e33d942bb23b1cf28dada9d4287183854c'},
+ // Zachary Book Four translated into French and Turkish.
+ 'zachary-biggest-lesson-yet:fr':{size:22784166,sha256:'f5ee68533b8b8595e86b9ecaa12bcd7af547131139be8a5683d6b63eb28cbad9'},
+ 'zachary-biggest-lesson-yet:tr':{size:22782204,sha256:'c902f1cc97c9761daad782e47fb21a2132843bb95a920e544df9d099f098cd30'}
 };
 const chunkSize=524288,maxBody=4*1048576;
 const pending=new Map();

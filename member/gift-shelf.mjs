@@ -19,6 +19,7 @@ const escape = value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt
 const translatedTitles={
  fr:{
  'zachary-my-unique-hat-2026-11':'Zachary et la casquette «My Unique»',
+ 'zachary-biggest-lesson-yet':'Zachary et la plus grande leçon',
  'emir-boy-who-never-smiles':'Emir et le garçon qui ne souriait jamais',
  'emir-barbershop-boys-and-salon-girls':'Emir et les garçons du salon de coiffure et les filles du salon',
  'emir-meets-zachary':'Emir rencontre Zachary'
@@ -32,6 +33,7 @@ const translatedTitles={
  },
  tr:{
  'zachary-my-unique-hat-2026-11':'Zachary ve “My Unique” Şapkası',
+ 'zachary-biggest-lesson-yet':'Zachary ve En Büyük Ders',
  'emir-boy-who-never-smiles':'Emir ve Hiç Gülümsemeyen Çocuk',
  'emir-barbershop-boys-and-salon-girls':'Emir ve Berber Dükkânının Çocukları ve Kuaför Salonunun Kızları',
  'emir-meets-zachary':'Emir Zachary ile Tanışıyor'
