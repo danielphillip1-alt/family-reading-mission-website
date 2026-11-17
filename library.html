@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light">
 <meta name="description" content="Authors On A Mission illustrated book editions in English, German, Portuguese, Turkish, Spanish and French.">
 <title>Our Books — Authors On A Mission</title>
@@ -65,22 +66,10 @@ footer{text-align:center;padding:20px;color:#e5d0a4;font:13px system-ui,sans-ser
 <button role="tab" data-language="fr" aria-selected="false">Français</button>
 </div>
 <p id="availability" role="status" aria-live="polite">Loading available books…</p>
-<p style="text-align:center"><button id="public-download-all" class="book-action" type="button">Download all books in this language</button></p>
+<p style="text-align:center"><button id="public-download-all" class="book-action" type="button" hidden>Download all books in this language</button></p>
 <section id="books" class="books" aria-label="Available titles"></section>
-<section class="how"><h2>Your books, your language.</h2><p>If someone sent you a book gift, open the personal gift link from their message to read or download your PDFs. The gift link protects your copies and unlocks the matching language automatically.</p><a href="/#join">Explore the book collection</a></section>
-<dialog id="access-dialog" aria-labelledby="access-title">
-<h2 id="access-title">Open your book</h2>
-<p id="access-selected"></p>
-<p>Books are protected for customers and gift recipients. If you received a book gift, open the private link in your email, or paste that link below to enter your bookshelf.</p>
-<label for="access-link">Your private gift link</label>
-<input id="access-link" type="url" inputmode="url" autocomplete="off" placeholder="Paste the gift link from your email">
-<p id="access-error" role="status"></p>
-<div class="access-actions">
-<button id="access-go" type="button">Open my books</button>
-<a href="/#join">Purchase the collection</a>
-<button id="access-close" class="secondary" type="button">Close</button>
-</div>
-</dialog></main><footer>© Authors On A Mission</footer>
+<section class="how"><h2>Read in order. Enjoy every adventure.</h2><p>Select your language, then download your available books. Your free-gift link provides access automatically.</p></section>
+</main><footer>© Authors On A Mission</footer>
 <script>
 (()=>{
 'use strict';
@@ -120,35 +109,25 @@ function render(){
   const cover=document.createElement('img');cover.src=backend+'/storybook/cover?slug='+encodeURIComponent(item.slug)+'&language='+encodeURIComponent(language);cover.alt=titles[item.slug][language]+' — original book cover';cover.loading='lazy';
   const title=document.createElement('h2');title.textContent=titles[item.slug][language];
   const badge=document.createElement('span');badge.className='edition';const part=sequence[item.slug];badge.textContent=part?part[0]+' · Book '+part[1]+' · '+labels[language].edition:labels[language].edition;
-  const open=document.createElement('button');open.className='book-action';open.type='button';open.textContent='Open / Download';
-  open.addEventListener('click',()=>showAccess(item.slug,language));
-  card.append(cover,title,badge,open);container.append(card);
+  card.append(cover,title,badge);container.append(card);
  }
 }
-const dialog=document.querySelector('#access-dialog'),accessSelected=document.querySelector('#access-selected'),
- accessLink=document.querySelector('#access-link'),accessError=document.querySelector('#access-error');
-let selectedBook=null,selectedLang=null,downloadAll=false;
-function showAccess(slug,lang,all=false){
- selectedBook=slug;selectedLang=lang;downloadAll=all;
- accessSelected.textContent=all?'Download all available books · '+labels[lang].edition:(titles[slug]?.[lang]||titles[slug]?.en||slug)+' · '+labels[lang].edition;
- accessError.textContent='';accessLink.value='';
- dialog.showModal();
+// A free gift's private URL grants access. No token is exposed publicly.
+const giftToken=new URL(location.href).searchParams.get('gift');
+const hasGift=/^[a-f0-9]{64}$/.test(giftToken||'');
+const bulkButton=document.querySelector('#public-download-all');
+bulkButton.hidden=!hasGift;
+if(hasGift){
+ bulkButton.addEventListener('click',()=>{
+  const link=new URL('/storybook/download-all',backend);
+  link.searchParams.set('gift',giftToken);
+  link.searchParams.set('language',language);
+  window.location.assign(link.toString());
+ });
+}else{
+ const help=document.querySelector('.how p');
+ if(help)help.textContent='This page shows the available stories. Open your private free-gift link to access your downloads.';
 }
-document.querySelector('#access-close').addEventListener('click',()=>dialog.close());
-document.querySelector('#public-download-all').addEventListener('click',()=>showAccess(null,language,true));
-document.querySelector('#access-go').addEventListener('click',()=>{
- let link;
- try{link=new URL(accessLink.value.trim());}catch{accessError.textContent='Paste the complete gift link from your email.';return;}
- const code=link.searchParams.get('gift');
- if(link.origin!==backend||link.pathname!=='/storybook/gift'||!/^[a-f0-9]{64}$/.test(code||'')){
-  accessError.textContent='That is not a valid Authors On A Mission gift link.';return;
- }
- const target=new URL('/storybook/gift',backend);target.searchParams.set('gift',code);
- target.searchParams.set('language',selectedLang);
- if(downloadAll)target.searchParams.set('download','all');
- else if(selectedBook)target.searchParams.set('book',selectedBook);
- window.location.assign(target.toString());
-});
 tabs.forEach(b=>b.addEventListener('click',()=>{
  language=b.dataset.language;
  const u=new URL(location.href);u.searchParams.set('language',language);history.replaceState(null,'',u);
