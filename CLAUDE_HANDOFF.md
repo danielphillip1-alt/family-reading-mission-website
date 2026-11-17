@@ -53,3 +53,5 @@ Backend `production-membership` @ 4615846 live on srv-dbrjl2h5efls73aq7ls0 (depl
 - Emir Book Three (`emir-meets-zachary`): NO editorial approval record found anywhere; remains locked.
 
 - 2026-11-17: Zachary Books 2 and 3 published in es, fr and tr (translated, typeset to the original layout, new cover panels); French Book 4 re-published with corrected French spacing. Hash-locked in member/approved-intake.mjs. Live QR flow verified: en, de, fr, es and tr each hold 7 books (Zachary 1–4, Emir 1–3), pt-PT holds 4 (Emir in Portuguese pending from the owner). Intake POSTs need Origin = the backend's own onrender URL.
+
+- 2026-11-17: Zachary Book 5 (slug zachary-foundation-of-something-great) live in all six languages: English as approved; es, fr, de, pt-PT and tr translated and typeset to the original layout (text flows continuously, illustration pages kept full-page, translated cover panel). Live QR flow verified: en, de, fr, es and tr hold 8 books each, pt-PT holds 5.
