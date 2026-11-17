@@ -4,10 +4,11 @@ import {once} from 'node:events';
 import QRCode from 'qrcode';
 import {sendTransactionalMail,mailConfigured} from './mail.mjs';
 import {giftArt} from './gift-shelf-art.mjs';
+import {storybookAdminPage} from './storybook-admin.mjs';
 import {shelfPage,isBundleBook,bundleTitle} from './gift-shelf.mjs';
 
 const SITE='https://theauthorsmission.de';
-const languages={en:'English','pt-PT':'Português',de:'Deutsch',tr:'Türkçe'};
+const languages={en:'English','pt-PT':'Português',de:'Deutsch',tr:'Türkçe',fr:'Français',es:'Español'};
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const hex=value=>/^[a-f0-9]{64}$/.test(value||'');
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -240,6 +241,9 @@ function inviteCard(token,name){
 export async function handleStorybook({req,res,url,pool,stripe}){
  const path=url.pathname,method=req.method;
  if(!path.startsWith('/storybook/')&&!path.startsWith('/api/admin/storybook/')&&path!=='/barber/checkout')return false;
+ if(path==='/api/admin/storybook/upload'&&method==='GET'){
+  send(res,200,storybookAdminPage(),'text/html; charset=utf-8');return true;
+ }
  if(!pool||!secret()){send(res,503,page('Storybook gifts are unavailable','<p>Please try again later.</p>'));return true;}
  try{
   if(path==='/storybook/issue'&&method==='GET'){
