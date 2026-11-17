@@ -41,3 +41,13 @@ Provide a matrix of title, language, editorial approval status, book order, actu
 
 ## Authority and scope
 Owner explicitly requests that Claude Code become the primary website/backend engineer and troubleshoot autonomously. Design asset creation may be outsourced separately. Work in the existing repo and services and preserve the approved design identity. Verify any apparent ambiguity in publication approval instead of guessing.
+
+## Verified status — 2026-11-17 (Claude Code session)
+Backend `production-membership` @ 4615846 live on srv-dbrjl2h5efls73aq7ls0 (deploys are started via the Render API; auto-deploy did not fire on push).
+- Root cause of the German defects: barber gift links (`/barber/open` → `/barber/redeem` → `/barber/books`) used an older release/bundle-only inventory: German had no Emir books and served the reduced 1.1 MB Book One. All gift, buyer and ZIP routes now share `languageEditions()` in `member/storybook-gifts.mjs`.
+- Gift recipients (storybook free/paid, barber) get exactly Language → Download on the approved artwork; barber recipients may change language on each visit. No PIN, code, price or purchase prompt.
+- `/barber/free-bundle.zip` (unauthenticated full-book ZIP) now 303s to the public library.
+- ZIPs stream headers immediately; heavy audit + live QA run once per deployed commit (`aom_release_audits`).
+- External iPhone-emulated test (2-hour QA links): gift page ~0.6–1.0 s, Download tap → ZIP start 0.3–0.5 s, 60,121,639-byte German ZIP complete in ~3 s (prepared cache, warm instance). Cold wake of the free instance measured ~13 s to first byte; prepared-ZIP warm-up after boot ~26–28 s (direct streaming covers that window).
+- German ZIP: 01_Zachary_Series/01 (14,389,311 B, ec7acc22…, 41 pp), 02 (1,071,855 B, 9daeb243…, 29 pp), 03 (11,555,110 B, e67ea9a5…, 59 pp); 02_Emir_Series/01 (16,647,424 B, f502d23c…, 44 pp), 02 (16,456,839 B, 2a9f19c4…, 34 pp). All open; first pages show the German original covers.
+- Emir Book Three (`emir-meets-zachary`): NO editorial approval record found anywhere; remains locked.
