@@ -145,12 +145,29 @@ async function deliverAllBooks(pool,res,slugs,lang){
   books.push({...source,slug,size:Number(source.size)});
  }
  const readChunks=async function*(book){
-  for(let offset=1;offset<=book.size;offset+=chunkSize){
-   const row=book.storage_key
-    ?(await pool.query('SELECT substring(pdf_content FROM $3 FOR 524288) AS bytes FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',[book.storage_key,book.sha256,offset])).rows[0]
-    :(await pool.query('SELECT bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 AND part=$3',[book.slug,lang,(offset-1)/chunkSize])).rows[0];
-   if(!row?.bytes?.length)throw Error('Missing archive PDF bytes');
-   yield row.bytes;
+  // Batch bounded-size reads: each PDF uses only a handful of database round-trips.
+  const batchParts=16;
+  if(book.storage_key){
+   for(let offset=1;offset<=book.size;offset+=chunkSize*batchParts){
+    const row=(await pool.query(
+     'SELECT substring(pdf_content FROM $3 FOR $4) AS bytes FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',
+     [book.storage_key,book.sha256,offset,chunkSize*batchParts])).rows[0];
+    if(!row?.bytes?.length)throw Error('Missing archive PDF bytes');
+    for(let pos=0;pos<row.bytes.length;pos+=chunkSize)yield row.bytes.subarray(pos,pos+chunkSize);
+   }
+  }else{
+   const count=Math.ceil(book.size/chunkSize);
+   for(let part=0;part<count;part+=batchParts){
+    const result=await pool.query(
+     'SELECT part,bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 AND part >=$3 AND part<$4 ORDER BY part',
+     [book.slug,lang,part,Math.min(count,part+batchParts)]);
+    if(result.rows.length!==Math.min(batchParts,count-part))throw Error('Archive edition is incomplete');
+    for(let i=0;i<result.rows.length;i++){
+     const row=result.rows[i];
+     if(row.part!==part+i||!row.bytes?.length)throw Error('Archive PDF chunks are incomplete');
+     yield row.bytes;
+    }
+   }
   }
  };
  res.writeHead(200,{...headers,'Content-Type':'application/zip',
@@ -469,7 +486,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
   if(method==='GET'&&path==='/storybook/download-all'){
    if(!slugs.length){send(res,404,'No approved books available','text/plain');return true;}
    try{await deliverAllBooks(pool,res,slugs,lang);}
-   catch(error){console.error('Secure book ZIP delivery failed',error?.code||error?.name);if(!res.headersSent)send(res,500,'Download unavailable','text/plain');else res.destroy();}
+   catch(error){console.error('Secure book ZIP delivery failed',error?.code||error?.name,error?.message||'');if(!res.headersSent)send(res,500,'Download unavailable','text/plain');else res.destroy();}
    return true;
   }
   if(method==='GET'&&path==='/storybook/pdf'&&(slugs.includes(slug)||(slug===bundleSlug&&slugs.length===12&&await bundleReady(pool,lang)))){
