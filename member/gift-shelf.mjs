@@ -76,7 +76,9 @@ export function shelfPage({lang,available,otherEditions,link,order}){
   const localizedTitle=translatedTitles[lang]?.[slug]||bundleTitle(slug,lang);
   const title=escape(localizedTitle);
   const art=giftArt[lang+':'+slug]||giftArt[slug];
-  const cover=art?'<img src="'+art+'" alt="">':'<span class="placeholder">'+title+'</span>';
+  const originalGermanCover=lang==='de'&&slug==='zachary-my-unique-hat-2026-11';
+  const cover=originalGermanCover?'<img src="/storybook/cover?slug=zachary-my-unique-hat-2026-11&amp;language=de" alt="Original German cover">'
+   :art?'<img src="'+art+'" alt="">':'<span class="placeholder">'+title+'</span>';
   const actions=available.includes(slug)?'<a class="button" href="'+escape(link('reader',slug))+'" aria-label="'+escape(w.read+' – '+bundleTitle(slug,lang))+'">'+w.read+'</a> <a class="button secondary" href="'+escape(link('reader-pdf',slug))+'" aria-label="'+escape(w.download+' – '+bundleTitle(slug,lang))+'">'+w.download+'</a>':'<span>'+w.missing+'</span>';
   const order=readingOrder[slug]||[slug.startsWith('emir-')?'Emir':'Zachary',0];
   const heading=order[0]!==lastSeries?'<li class="series-start">'+escape(order[0])+' Series — read in order</li>':'';
