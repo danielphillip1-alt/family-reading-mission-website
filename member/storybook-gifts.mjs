@@ -414,11 +414,21 @@ export async function handleStorybook({req,res,url,pool,stripe}){
   const row=(await pool.query('SELECT * FROM aom_storybook_claims WHERE token_hash=$1',[key])).rows[0];
   if(!row){send(res,404,page('Gift link unavailable','<p>Open the private link from your gift message.</p>'));return true;}
   if(path==='/storybook/gift'&&method==='GET'){
+   const wantedBook=url.searchParams.get('book');
+   const bulkRequested=url.searchParams.get('download')==='all';
+   const already=activeCookie(req,gift);
+   if(row.used_at&&hex(already)&&row.session_hash&&equal(hash(already),row.session_hash)&&!row.finished_at&&new Date(row.session_expires)>new Date()){
+    const readyBooks=await availableLanguageBooks(pool,row.language);
+    const target=bulkRequested&&readyBooks.length?urlFor('/storybook/download-all',{gift})
+     :wantedBook&&readyBooks.includes(wantedBook)?urlFor('/storybook/read',{gift,slug:wantedBook}):urlFor('/storybook/shelf',{gift});
+    redirect(res,target);return true;
+   }
    const selected=url.searchParams.get('language');
    const lang=row.language||(Object.hasOwn(languages,selected)?selected:'en');
    const labels=copy[lang]||copy.en;
+   const requestedFields=(bulkRequested?'<input type="hidden" name="download" value="all">':'')+(isBundleBook(wantedBook)&&wantedBook!=='emir-meets-zachary'?'<input type="hidden" name="book" value="'+escape(wantedBook)+'">':'');
    const formHtml=row.used_at?'<p>'+labels[0]+'</p><a class="open" href="'+SITE+'">Visit the website</a>':
-    '<form action="/storybook/open" method="post"><input type="hidden" name="gift" value="'+gift+'"><label id="languageLabel" for="language">'+labels[5]+'</label><select id="language" name="language">'+options(lang)+'</select><label id="codeLabel" for="code">'+labels[6]+'</label><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{4}" maxlength="4" required><button class="open" id="open">'+labels[4]+'</button></form>';
+    '<form action="/storybook/open" method="post"><input type="hidden" name="gift" value="'+gift+'">'+requestedFields+'<label id="languageLabel" for="language">'+labels[5]+'</label><select id="language" name="language">'+options(lang)+'</select><label id="codeLabel" for="code">'+labels[6]+'</label><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{4}" maxlength="4" required><button class="open" id="open">'+labels[4]+'</button></form>';
    const notice={wrong:'That code did not match. Check your gift message.',locked:'Too many attempts. Ask the gift organizer for help.',edition:'This language edition is still being prepared. Your code is ready to use later.'}[url.searchParams.get('notice')]||'';
    const html=(await template()).replace('<html lang="en">','<html lang="'+lang+'">').replace('%%RECIPIENT%%',()=>escape(displayName(row.recipient,'Friend'))).replace('%%SENDER%%',()=>escape(displayName(row.sender,'Someone special')))
     .replace('%%NOTICE%%',()=>notice?'<p role="status">'+notice+'</p>':'').replace('%%FORM%%',()=>formHtml);
@@ -438,7 +448,11 @@ export async function handleStorybook({req,res,url,pool,stripe}){
    const session=randomBytes(32).toString('hex');
    const q=await pool.query("UPDATE aom_storybook_claims SET used_at=now(),language=$2,session_hash=$3,session_expires=now()+interval '1 hour' WHERE token_hash=$1 AND used_at IS NULL AND attempts<8 RETURNING token_hash",[key,lang,hash(session)]);
    if(!q.rowCount){redirect(res,giftLink(gift));return true;}
-   redirect(res,urlFor('/storybook/shelf',{gift}),{'Set-Cookie':cookie(gift,session,3600)});return true;
+   const requestedBook=data?.get('book'),requestedBulk=data?.get('download')==='all';
+   const available=await availableLanguageBooks(pool,lang);
+   const destination=requestedBulk?urlFor('/storybook/download-all',{gift}):
+    requestedBook&&available.includes(requestedBook)?urlFor('/storybook/read',{gift,slug:requestedBook}):urlFor('/storybook/shelf',{gift});
+   redirect(res,destination,{'Set-Cookie':cookie(gift,session,3600)});return true;
   }
   const session=activeCookie(req,gift);
   if(!hex(session)||!row.session_hash||!equal(hash(session),row.session_hash)||row.finished_at||new Date(row.session_expires)<=new Date()){
