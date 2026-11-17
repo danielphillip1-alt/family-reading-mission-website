@@ -39,6 +39,14 @@ const words={
  de:{title:'Dein Büchergeschenk!',intro:'Die Abenteuer von Zachary und Emir in einem Geschenk. Such dir ein Buch aus und lies los!',read:'Buch öffnen',download:'PDF herunterladen',save:'Lade deine Bücher herunter, damit du sie jederzeit wieder lesen kannst.',missing:'In dieser Sprache noch nicht verfügbar'},
  'pt-PT':{title:'O teu presente de livros!',intro:'As aventuras de Zachary e Emir num só presente. Escolhe um livro e começa a ler!',read:'Abrir livro',download:'Descarregar PDF',save:'Descarrega os teus livros para os poderes ler novamente sempre que quiseres.',missing:'Ainda indisponível neste idioma'}
 };
+const readingOrder={
+ 'zachary-my-unique-hat-2026-11':['Zachary',1],
+ 'zachary-school-that-believed-in-him':['Zachary',2],
+ 'zachary-school-that-made-room':['Zachary',3],
+ 'emir-boy-who-never-smiles':['Emir',1],
+ 'emir-barbershop-boys-and-salon-girls':['Emir',2],
+ 'emir-meets-zachary':['Emir',3]
+};
 const style=`
 :root{color-scheme:light;--forest:#063a2b;--gold:#f4cf76;--ink:#143324;--berry:#8e151b}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% 18%,#165b3d,transparent 60%),#042a20;color:var(--ink);font:16px/1.45 Georgia,serif}
@@ -53,7 +61,7 @@ h1{margin:0;color:var(--berry);font-size:clamp(2.15rem,6vw,4.6rem);line-height:1
 .cover{width:100%;aspect-ratio:1/1.04;display:grid;place-items:center;background:radial-gradient(ellipse,#f4d684,#e8c97a 55%,#f7e1a2 72%);border-radius:12px}
 .cover img{display:block;width:auto;max-width:87%;height:90%;object-fit:contain;box-shadow:5px 6px 8px #38282d75;border-radius:3px}
 .placeholder{display:grid;place-items:center;width:68%;height:82%;padding:12px;background:#0a503a;color:#ffe19a;border:4px double currentColor;border-radius:5px;font-weight:bold}
-h2{font-size:1.22rem;line-height:1.18;min-height:2.36em;margin:13px 0;display:grid;place-items:center}
+.book-sequence{font:800 14px system-ui,sans-serif;letter-spacing:.03em;color:#7c1725;margin:10px 0 0}.series-start{grid-column:1/-1;font:800 clamp(20px,3vw,30px) Georgia,serif;color:#19513f;text-align:left;margin:20px 0 0;padding:4px 8px;border-bottom:3px solid #b77b2b}h2{font-size:1.22rem;line-height:1.18;min-height:2.36em;margin:13px 0;display:grid;place-items:center}
 .actions{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;align-items:center;margin-top:auto}
 .button{display:inline-block;padding:9px 13px;border-radius:50px;background:var(--berry);color:#fff8dd;font-weight:bold;text-decoration:none;border:2px solid #f1c66b}
 .secondary{background:var(--forest)}a:focus-visible{outline:3px solid var(--forest);outline-offset:3px}
@@ -63,13 +71,17 @@ footer{text-align:center;background:var(--forest);color:#ffe59d;padding:17px;fon
 export function shelfPage({lang,available,otherEditions,link,order}){
  const w=words[lang]||words.en;
  const slugs=order||[...new Set([...bundleBooks.map(b=>b[0]),...available,...otherEditions])].filter(slug=>available.includes(slug)||otherEditions.includes(slug));
+ let lastSeries='';
  const cards=slugs.map(slug=>{
   const localizedTitle=translatedTitles[lang]?.[slug]||bundleTitle(slug,lang);
   const title=escape(localizedTitle);
   const art=giftArt[lang+':'+slug]||giftArt[slug];
   const cover=art?'<img src="'+art+'" alt="">':'<span class="placeholder">'+title+'</span>';
   const actions=available.includes(slug)?'<a class="button" href="'+escape(link('reader',slug))+'" aria-label="'+escape(w.read+' – '+bundleTitle(slug,lang))+'">'+w.read+'</a> <a class="button secondary" href="'+escape(link('reader-pdf',slug))+'" aria-label="'+escape(w.download+' – '+bundleTitle(slug,lang))+'">'+w.download+'</a>':'<span>'+w.missing+'</span>';
-  return '<li class="book"><div class="cover">'+cover+'</div><h2>'+title+'</h2><div class="actions">'+actions+'</div></li>';
+  const order=readingOrder[slug]||[slug.startsWith('emir-')?'Emir':'Zachary',0];
+  const heading=order[0]!==lastSeries?'<li class="series-start">'+escape(order[0])+' Series — read in order</li>':'';
+  lastSeries=order[0];
+  return heading+'<li class="book"><div class="cover">'+cover+'</div><div class="book-sequence">'+escape(order[0])+' · Book '+order[1]+'</div><h2>'+title+'</h2><div class="actions">'+actions+'</div></li>';
  }).join('');
  return '<!doctype html><html lang="'+lang+'"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow"><title>'+w.title+'</title><style>'+style+'</style><main><img class="hero" alt="" src="'+giftArt['gift-hero']+'"><header class="intro"><h1>'+w.title+'</h1><p>'+w.intro+'</p><p class="save">'+w.save+'</p></header><ul class="books">'+cards+'</ul><footer>Authors On A Mission</footer></main></html>';
 }
