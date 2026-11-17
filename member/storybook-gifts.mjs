@@ -188,9 +188,10 @@ const fileQuery=`
  WHERE r.slug=$1 AND e.language=$2 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()
 `;
 // Editorial publication lock: technical upload approval is not final manuscript
-// approval. Emir Book Three is released in English, Spanish, German and Turkish
-// (owner approvals 2026-11-17), each only as that exact approved file; other languages stay locked.
-const editorialReleases={'emir-meets-zachary':{en:'a35dcd79c4357fe79d658cd4a17884c38bb15bd95aeb16c3bd5619601690a2e5',es:'dac7f72239bbca376d3a4622f4244c7780263db6d5a5ac779e5509dc56d530cf',de:'e2be47f81ee400fd22b8d363b364c3aa6d830aaed5c204449204541654d911e2',tr:'02ba124bd4652e48237899804ac334725f241b3e7a9eb8c7cfc63bfd8ac23cee'}};
+// approval. Emir Book Three is released in English, Spanish, German, Turkish and
+// French (owner approvals 2026-11-17), each only as that exact approved file;
+// any other file or language (e.g. an old stored draft) stays locked.
+const editorialReleases={'emir-meets-zachary':{en:'a35dcd79c4357fe79d658cd4a17884c38bb15bd95aeb16c3bd5619601690a2e5',es:'dac7f72239bbca376d3a4622f4244c7780263db6d5a5ac779e5509dc56d530cf',de:'e2be47f81ee400fd22b8d363b364c3aa6d830aaed5c204449204541654d911e2',tr:'02ba124bd4652e48237899804ac334725f241b3e7a9eb8c7cfc63bfd8ac23cee',fr:'bb8f305fe3d6429d9abad1d0ab2dd26620eb3bc80cf09528771f369606196dd2'}};
 const releasedBookThree=Object.entries(editorialReleases['emir-meets-zachary']).map(([l,s])=>"('"+l+"','"+s+"')").join(',');
 const editoriallyLocked=(slug,lang)=>Object.hasOwn(editorialReleases,slug)&&!editorialReleases[slug][lang];
 async function fileFor(pool,slug,lang){
@@ -468,7 +469,7 @@ export async function handleStorybook({req,res,url,pool,stripe}){
    res.end(bytes);return true;
   }
   const coverLang=url.searchParams.get('language');
-  if(slug==='emir-meets-zachary'&&['en','es','de','tr'].includes(coverLang)&&!editoriallyLocked(slug,coverLang)){
+  if(slug==='emir-meets-zachary'&&['en','es','de','tr','fr'].includes(coverLang)&&!editoriallyLocked(slug,coverLang)){
    const bytes=Buffer.from((await readFile(new URL('./approved-covers/emir-book3-'+coverLang+'.jpg.b64',import.meta.url),'utf8')).trim(),'base64');
    res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':bytes.length,'X-Content-Type-Options':'nosniff','Cache-Control':'public,max-age=3600'});
    res.end(bytes);return true;
