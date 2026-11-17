@@ -1,6 +1,29 @@
 import {once} from 'node:events';
 // Stream a ZIP of exactly the caller-authorized PDFs; no public file access.
 // ZIP store method with data descriptors keeps memory bounded to one PDF chunk.
+const bookNames={
+ 'zachary-my-unique-hat-2026-11':'01_Zachary_Book_1_My_Unique_Hat',
+ 'zachary-school-that-believed-in-him':'02_Zachary_Book_2_The_School_That_Believed',
+ 'zachary-school-that-made-room':'03_Zachary_Book_3_The_School_That_Made_Room',
+ 'emir-boy-who-never-smiles':'01_Emir_Book_1_The_Boy_Who_Never_Smiles',
+ 'emir-barbershop-boys-and-salon-girls':'02_Emir_Book_2_Barbershop_And_Salon',
+ 'emir-meets-zachary':'03_Emir_Book_3_Meets_Zachary'
+};
+export const bookZipOrder=slug=>{
+ const match=bookNames[slug];
+ return match?Number(match.slice(0,2))+(slug.startsWith('emir-')?100:0):900;
+};
+export const bookZipName=(slug,language)=>{
+ const root=slug.startsWith('emir-')?'02_Emir_Series':'01_Zachary_Series';
+ const name=bookNames[slug]||'99_'+slug;
+ return root+'/'+name+'_'+language+'.pdf';
+};
+export function bookZipByteLength(books,language){
+ return 22+books.reduce((sum,book)=>{
+  const n=Buffer.byteLength(bookZipName(book.slug,language),'utf8');
+  return sum+30+n+Number(book.size)+16+46+n;
+ },0);
+};
 const encode=name=>Buffer.from(name,'utf8');
 const table=Uint32Array.from({length:256},(_,i)=>{
  let c=i;
@@ -23,8 +46,8 @@ export async function streamBookZip({res,language,books,readChunks}){
  let position=0;
  const directories=[];
  for(const book of books){
-  const name=book.slug+'-'+language+'.pdf';
-  if(!/^[a-z0-9-]+\.pdf$/i.test(name))throw Error('Invalid archive entry');
+  const name=bookZipName(book.slug,language);
+  if(!/^[a-z0-9_./-]+\.pdf$/i.test(name)||name.includes('..'))throw Error('Invalid archive entry');
   const nameBytes=encode(name);
   const offset=position;
   const header=Buffer.alloc(30);
