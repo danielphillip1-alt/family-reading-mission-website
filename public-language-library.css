@@ -1,0 +1,9 @@
+#aom-language-library{margin:30px auto;max-width:1120px;padding:24px clamp(16px,4vw,38px);background:#fff7df;border-radius:24px;color:#123c31;box-shadow:0 10px 32px #001b1430}
+#aom-language-library h2{margin:0 0 10px;font-size:clamp(25px,4vw,42px)}
+#aom-language-library p{line-height:1.5;max-width:780px}
+.aom-language-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:24px 0}
+.aom-language-tabs button{border:2px solid #17624f;background:#fff;color:#174a3d;padding:10px 14px;border-radius:28px;font:700 15px system-ui;cursor:pointer}
+.aom-language-tabs button[aria-pressed=true]{background:#09513b;color:#fff}
+.aom-language-books{list-style:none;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px}
+.aom-language-books li{display:flex;flex-direction:column;gap:8px;padding:20px;border:2px solid #c6a369;border-radius:16px;background:#fffefa;min-height:110px}
+.aom-language-books strong{font-size:18px;line-height:1.3}.aom-language-books small{color:#576d64}
