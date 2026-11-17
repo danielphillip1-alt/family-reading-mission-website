@@ -254,7 +254,7 @@ export async function languageBookCounts(pool,codes=Object.keys(languages)){
 }
 
 async function* bookChunks(pool,book,lang){
- const batchParts=16;
+ const batchParts=4;
  if(book.storage_key){
   for(let offset=1;offset<=book.size;offset+=chunkSize*batchParts){
    const row=(await pool.query(
@@ -302,13 +302,19 @@ export function warmGiftArchives(pool){
 }
 export const forgetGiftInventory=()=>editionCache.clear();
 // After an approved edition changes: forget cached inventory and rebuild ZIPs.
+let refreshQueued=null;
 export function refreshGiftLibrary(pool){
  editionCache.clear();
- return warmGiftArchives(pool).then(rows=>console.log('Private language ZIP cache refreshed:',JSON.stringify(rows))).catch(error=>console.error('ZIP refresh failed',error?.message||error?.name));
+ if(refreshQueued)return refreshQueued;
+ refreshQueued=warmDone.then(()=>{refreshQueued=null;editionCache.clear();return warmGiftArchives(pool);});
+ return refreshQueued.then(rows=>console.log('Private language ZIP cache refreshed:',JSON.stringify(rows))).catch(error=>console.error('ZIP refresh failed',error?.message||error?.name));
 }
+// Only the most requested bundle is prepared ahead of time; other languages
+// are cached the first time someone downloads them (within the cache limit).
+const PREWARM=(process.env.AOM_ZIP_PREWARM||'en').split(',').map(x=>x.trim()).filter(Boolean);
 async function prepareAllArchives(pool){
  const status=[];
- for(const lang of Object.keys(languages)){
+ for(const lang of Object.keys(languages).filter(l=>PREWARM.includes(l))){
   const books=await languageEditions(pool,lang);
   if(!books.length)continue;
   const plan=archivePlan(books,lang);
