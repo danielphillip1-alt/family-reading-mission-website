@@ -115,5 +115,5 @@ test('Checkout redirects to existing one-time Stripe payment link only with four
  const f=fixture(true);
  const r=await request(f,'/barber/checkout');
  assert.equal(r.res.status,303);
- assert.equal(r.res.headers.Location,'https://buy.stripe.com/14AdRbcsQ96aeDKe89ffy03');
+ assert.equal(r.res.headers.Location,'https://buy.stripe.com/14AeVfeAY2HM8fm7JLffy04');
 });
