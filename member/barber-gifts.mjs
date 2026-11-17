@@ -22,7 +22,9 @@ function freeBundlePage(lang){
  return '<!doctype html><html lang="'+safe(lang)+'"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>'+title+'</title><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 20% 15%,#12b7e9,transparent 45%),radial-gradient(circle at 85% 75%,#fb6f9b,transparent 45%),linear-gradient(140deg,#0b2777,#6627a7);font-family:system-ui;color:white;text-align:center}main{padding:35px 25px;max-width:720px}h1{font-size:clamp(42px,9vw,82px);line-height:1.05;text-shadow:4px 5px #142153;margin:0 0 35px}.gift{font-size:90px;margin-bottom:15px}.button{display:inline-block;background:#ffdf38;color:#142354;border-radius:60px;padding:22px 32px;font-size:clamp(20px,4vw,31px);font-weight:1000;text-decoration:none;box-shadow:0 10px #ed7e28}.button:focus-visible{outline:4px solid white}</style><main><div class="gift" aria-hidden="true">🎁📚✨</div><h1>'+title+'</h1><a class="button" href="/barber/free-bundle.zip?language='+encodeURIComponent(lang)+'">'+title+'</a></main></html>';
 }
 
-const LINK='plink_1UboGGRuZKBP2B3nzmcAPiQL';
+const LINK='plink_1UcgIURuZKBP2B3nCAGISBfm';
+const LEGACY_LINK='plink_1UboGGRuZKBP2B3nzmcAPiQL';
+const validPurchase=s=>(s.payment_link===LINK&&s.currency==='usd'&&s.amount_total===4999)||(s.payment_link===LEGACY_LINK&&s.currency==='eur'&&s.amount_total===2499);
 const langs=new Set(['en','de','pt-PT']);
 const REQUIRED_BUNDLE_SLUGS=['zachary-my-unique-hat-2026-11','zachary-school-that-believed-in-him','emir-boy-who-never-smiles','emir-barbershop-boys-and-salon-girls'];
 const hasFullBundle=arrays=>arrays.every(slugs=>REQUIRED_BUNDLE_SLUGS.every(slug=>slugs.includes(slug)));
@@ -33,7 +35,7 @@ const language=s=>s.custom_fields?.find(f=>f.key==='booklanguage')?.dropdown?.va
 const code=(id,slot=1)=>createHmac('sha256',process.env.AOM_BARBER_GIFT_SECRET||process.env.STRIPE_WEBHOOK_SECRET).update(slot===1?'gift:'+id:'gift2:'+id).digest('hex');
 function send(res,status,body,type='text/html; charset=utf-8',referrerPolicy='no-referrer'){res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','Referrer-Policy':referrerPolicy,'X-Robots-Tag':'noindex,nofollow','X-Content-Type-Options':'nosniff'});res.end(body);}
 function page(title,body){return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>'+safe(title)+'</title><style>body{background:#073d2e;color:#143d30;font:17px/1.5 system-ui;padding:20px}main{max-width:650px;margin:30px auto;padding:28px;background:#fff8e8;border-radius:18px}a{color:#006445;overflow-wrap:anywhere}.btn,button{display:inline-block;padding:12px 18px;margin:10px 0;background:#096043;color:white;border:0;border-radius:9px;text-decoration:none;cursor:pointer}input,select{display:block;padding:10px;width:95%;margin:5px 0 15px}</style><main><h1>'+safe(title)+'</h1>'+body+'</main></html>';}
-async function verified(stripe,id){if(!/^cs_live_[a-zA-Z0-9]{16,200}$/.test(id||''))return null;let s;try{s=await stripe.checkout.sessions.retrieve(id);}catch(e){if(e?.type==='StripeInvalidRequestError'&&[400,404].includes(e?.statusCode))return null;throw e;}return s.livemode&&s.mode==='payment'&&s.status==='complete'&&s.payment_status==='paid'&&s.payment_link===LINK&&s.currency==='eur'&&s.amount_total===2499?s:null;}
+async function verified(stripe,id){if(!/^cs_live_[a-zA-Z0-9]{16,200}$/.test(id||''))return null;let s;try{s=await stripe.checkout.sessions.retrieve(id);}catch(e){if(e?.type==='StripeInvalidRequestError'&&[400,404].includes(e?.statusCode))return null;throw e;}return s.livemode&&s.mode==='payment'&&s.status==='complete'&&s.payment_status==='paid'&&validPurchase(s)?s:null;}
 async function titles(pool,at,lang){const q=await pool.query(`
  SELECT r.slug FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.status='published' AND r.published_at<=$1
  UNION SELECT r.slug FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.status='published' AND r.published_at<=$1
@@ -74,7 +76,7 @@ function giftReader(access,lang,slug){
 // The purchase remains valid when either email is blank; the customer can share links later.
 // A database update reserves each invitation slot to avoid duplicate sends on refresh.
 export async function sendCheckoutGiftInvitations({pool,session,personalization=null}) {
-  if(!session||session.payment_link!==LINK||session.livemode!==true||
+  if(!session||!validPurchase(session)||session.livemode!==true||
      session.mode!=='payment'||session.status!=='complete'||session.payment_status!=='paid')return [];
   const id=session.id;
   if(!/^cs_live_[A-Za-z0-9]{16,200}$/.test(id||''))return [];
@@ -146,7 +148,7 @@ if(path==='/barber/checkout'&&req.method==='GET'){
   const sets=await Promise.all([...langs].map(l=>titles(pool,new Date(),l)));
   const same=hasFullBundle(sets);
   if(!same){send(res,503,page('Your four-book gift bundle is being prepared','<p>We are completing the approved digital editions for English, German and Portuguese. To protect buyers, checkout is unavailable until all four books can be delivered in the selected reading language.</p><p>No payment has been taken.</p><p>For help or to request a release notification, email <a href="mailto:brathatfashionhouse@gmail.com">Authors On A Mission</a>.</p>'));return true;}
-  res.writeHead(303,{'Location':'https://buy.stripe.com/14AdRbcsQ96aeDKe89ffy03','Cache-Control':'no-store'});res.end();return true;
+  res.writeHead(303,{'Location':'https://buy.stripe.com/14AeVfeAY2HM8fm7JLffy04','Cache-Control':'no-store'});res.end();return true;
 }
 if(path==='/barber/catalog-status'&&req.method==='GET'){const now=new Date();const out={};for(const lang of langs)out[lang]=await titles(pool,now,lang);send(res,200,JSON.stringify({publishedBooksByLanguage:out,requiredBundleSlugs:REQUIRED_BUNDLE_SLUGS,bundleReady:hasFullBundle(Object.values(out))}),'application/json; charset=utf-8');return true;}
 if(path==='/barber/thanks'&&req.method==='GET'){
@@ -157,7 +159,7 @@ const giftUrl=new URL('/barber/open?gift='+g,process.env.APP_URL).href;
 const giftUrl2=new URL('/barber/open?gift='+g2,process.env.APP_URL).href;
 // Recipient emails wait for a completed personalization form and permission.
 try{if(email&&mailConfigured())await sendTransactionalMail({email,subject:'Your digital book bundle and personalized gift links',html:'<p>Thank you for supporting Authors On A Mission.</p><p>Your personal books: <a href="'+safe(new URL('/barber/thanks?session_id='+id,process.env.APP_URL).href)+'">Open your purchased book collection</a></p><p><strong>Personalize gifts:</strong> <a href="'+safe(new URL('/barber/setup?session_id='+id,process.env.APP_URL).href)+'">Enter sender, barbershop and recipient names</a></p><p>After you save the names, you will receive two private gift links to share.</p><p>Keep your personal receipt link private. This is a one-time purchase, not a subscription.</p>'},'bundle-buyer-two-gifts-'+id);}catch(e){console.error('Barber buyer email failed',e?.code||e?.name);}
-send(res,200,page('Thank you for your purchase!','<p>Your one-time €24.99 purchase is verified. Your personal downloads:</p>'+list(await titles(pool,at,lang),'/barber/pdf?session_id='+encodeURIComponent(id)+'&slug=')+'<h2>Personalize your two gifts</h2><p><a class="btn" href="'+safe(new URL('/barber/setup?session_id='+id,process.env.APP_URL).href)+'">Enter names for the gift page</a></p><p>Save the names first, then send each recipient their personalized private gift link. Each gift can be redeemed once. Keep your payment receipt private.</p>'));return true;
+send(res,200,page('Thank you for your purchase!','<p>Your one-time purchase is verified. Your personal downloads:</p>'+list(await titles(pool,at,lang),'/barber/pdf?session_id='+encodeURIComponent(id)+'&slug=')+'<h2>Personalize your two gifts</h2><p><a class="btn" href="'+safe(new URL('/barber/setup?session_id='+id,process.env.APP_URL).href)+'">Enter names for the gift page</a></p><p>Save the names first, then send each recipient their personalized private gift link. Each gift can be redeemed once. Keep your payment receipt private.</p>'));return true;
 }
 if(path==='/barber/pdf'&&req.method==='GET'){const s=await verified(stripe,id);if(!s){send(res,403,'Payment not verified','text/plain');return true;}await pdf(pool,res,slug,language(s),new Date(s.created*1000));return true;}
 
