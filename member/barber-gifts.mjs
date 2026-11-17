@@ -119,7 +119,7 @@ export async function sendCheckoutGiftInvitations({pool,session,personalization=
 }
 export async function handleBarber({req,res,url,stripe,pool}){
 if(!url.pathname.startsWith('/barber/'))return false;
-if(!stripe||!pool){send(res,503,page('Service unavailable','Please contact support.'));return true;}
+if(!pool){send(res,503,page('Service unavailable','Please contact support.'));return true;}
 try{
 const path=url.pathname,id=url.searchParams.get('session_id'),gift=url.searchParams.get('gift'),access=url.searchParams.get('access'),slug=url.searchParams.get('slug');
 
