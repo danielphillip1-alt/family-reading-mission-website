@@ -39,7 +39,13 @@ const approved={
  'zachary-school-that-believed-in-him:tr':{size:12912538,sha256:'a10507e877fe78945e478cbf1eca2b16bbeddd8b5087507bf8d6f058cdc45593'},
  'zachary-school-that-made-room:es':{size:24322631,sha256:'e2c5186f1c37d015a88c3491f749bbb796f1b57e3586845cd97871479fd2a96b'},
  'zachary-school-that-made-room:fr':{size:24325244,sha256:'c7feaadb215fb44e6cacc6e0165171b38c867bdb6a3cf420bb18fc4ebca876e8'},
- 'zachary-school-that-made-room:tr':{size:24324941,sha256:'0764bb9c594e57fd09a4ba97cca88ff980c5fac01f1a4ef68c5b04fc14e3f625'}
+ 'zachary-school-that-made-room:tr':{size:24324941,sha256:'0764bb9c594e57fd09a4ba97cca88ff980c5fac01f1a4ef68c5b04fc14e3f625'},
+ 'zachary-foundation-of-something-great:en':{size:9670568,sha256:'92ceb6c0cdf9f23eba58eba2a4f442df4c6366071685da4e25dcc0c204c3a0a2'},
+ 'zachary-foundation-of-something-great:es':{size:6187379,sha256:'8ca3a7126af6226f46082c3d35afc4ad56c0e959e8744be11d8c98a7dc9ec8d0'},
+ 'zachary-foundation-of-something-great:fr':{size:6191063,sha256:'7a85a360db46aa4f09134e4cd14b8c9e21d51951efd30ae6c3e65f897eeef72f'},
+ 'zachary-foundation-of-something-great:de':{size:6193604,sha256:'0b9dea57c067fae9c84e785f279a551f95fd11e83cfcac698f2be3db4b189b16'},
+ 'zachary-foundation-of-something-great:pt-PT':{size:6188914,sha256:'d7966ccb68d28b9ad7f0c1b2b3cc63713295c383bffda77ed6bde233538567c0'},
+ 'zachary-foundation-of-something-great:tr':{size:6184937,sha256:'ceda4fe14f18754a874cd9af9861920b54ec6165e877f4ccc26aef602cc4f8c3'}
 };
 const chunkSize=524288,maxBody=4*1048576;
 const pending=new Map();

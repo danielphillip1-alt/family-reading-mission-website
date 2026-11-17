@@ -5,6 +5,7 @@ const bookNames={
  'zachary-school-that-believed-in-him':'02_Zachary_Book_2_The_School_That_Believed',
  'zachary-school-that-made-room':'03_Zachary_Book_3_The_School_That_Made_Room',
  'zachary-biggest-lesson-yet':'04_Zachary_Book_4_The_Biggest_Lesson_Yet',
+ 'zachary-foundation-of-something-great':'05_Zachary_Book_5_The_Foundation_Of_Something_Great',
  'emir-boy-who-never-smiles':'01_Emir_Book_1_The_Boy_Who_Never_Smiles',
  'emir-barbershop-boys-and-salon-girls':'02_Emir_Book_2_Barbershop_And_Salon',
  'emir-meets-zachary':'03_Emir_Book_3_Meets_Zachary'
