@@ -19,7 +19,10 @@ const approved={
  'emir-meets-zachary:fr':{size:20990663,sha256:'bb8f305fe3d6429d9abad1d0ab2dd26620eb3bc80cf09528771f369606196dd2'},
  // Zachary Book Four (English), owner-approved manuscript; only typography change:
  // the "English manuscript · Editorial draft · 8 November 2026" footer was removed.
- 'zachary-biggest-lesson-yet:en':{size:26345338,sha256:'e1e6a50138bfeffd20089ac056d04812f8fd3d21ed1a9a4c36049c298070b9a1'}
+ 'zachary-biggest-lesson-yet:en':{size:26345338,sha256:'e1e6a50138bfeffd20089ac056d04812f8fd3d21ed1a9a4c36049c298070b9a1'},
+ // Owner-approved replacement English editions of Zachary Books Two and Three.
+ 'zachary-school-that-believed-in-him:en':{size:17380946,sha256:'5ac52203a457f355e46d0638f4cd23769681f22f20d33eef7a5ba78fce094082'},
+ 'zachary-school-that-made-room:en':{size:24320896,sha256:'48b4d8baff838e6d125bafcc9d3a289c23c8b877c450c5bdd6af871ce3ecfbb0'}
 };
 const chunkSize=524288,maxBody=4*1048576;
 const pending=new Map();
