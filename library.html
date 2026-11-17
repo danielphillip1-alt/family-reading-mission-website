@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="description" content="Authors On A Mission illustrated book editions in English, German, Portuguese, Turkish, Spanish and French.">
+<title>Our Books — Authors On A Mission</title>
+<style>
+:root{--forest:#063a2b;--deep:#042c22;--cream:#fff4d8;--gold:#e9bb5c;--berry:#921d35;--ink:#19372e}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% 15%,#28654b,#063a2b 55%,#042c22);color:var(--cream);font:17px/1.5 Georgia,serif}
+a{color:inherit}header{display:flex;justify-content:space-between;align-items:center;gap:16px;max-width:1160px;margin:auto;padding:20px clamp(16px,4vw,42px)}
+.brand{font-size:clamp(17px,2.6vw,23px);font-weight:bold;text-decoration:none;letter-spacing:.015em}
+.home{font-family:system-ui,sans-serif;font-size:14px;text-decoration:none;padding:9px 15px;border:1px solid #f0c66a;border-radius:30px}
+main{max-width:1160px;margin:0 auto;padding:8px clamp(16px,4vw,42px) 60px}
+.hero{text-align:center;margin:14px auto 34px;max-width:790px}
+.eyebrow{color:var(--gold);font-family:system-ui,sans-serif;font-weight:800;font-size:12px;letter-spacing:.2em;text-transform:uppercase}
+h1{font-size:clamp(38px,7vw,74px);line-height:1.06;margin:14px auto;color:#ffe3a7}
+.intro{font-size:clamp(16px,2.4vw,21px);margin:auto;max-width:660px;color:#f4eedb}
+.language-tabs{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;margin:30px 0 17px}
+.language-tabs button{font:700 14px system-ui,sans-serif;border:2px solid #dfb76a;border-radius:999px;padding:11px 17px;background:#fff5d8;color:var(--ink);cursor:pointer;min-width:75px}
+.language-tabs button[aria-selected=true]{background:#ad293c;border-color:#ffe6a6;color:white;box-shadow:0 0 0 3px #f7d88555}
+.language-tabs button:focus-visible,a:focus-visible{outline:3px solid #fff;outline-offset:4px}
+#availability{text-align:center;min-height:26px;margin:12px 0 24px;color:#fff1cc;font-family:system-ui,sans-serif;font-size:15px}
+.books{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:22px}
+.book{background:linear-gradient(150deg,#fffdf2,#ffedd0);border:3px solid #e9b75f;border-radius:18px;box-shadow:0 12px 0 #023224,0 15px 35px #001a1288;color:var(--ink);text-align:center;overflow:hidden;padding:18px;display:flex;flex-direction:column;align-items:center}
+.book img{width:100%;max-width:210px;aspect-ratio:1/1.15;object-fit:contain;filter:drop-shadow(7px 9px 7px #34302c44)}
+.book h2{font-size:clamp(17px,2.2vw,21px);line-height:1.24;margin:17px 0 10px;flex:1}
+.edition{background:#13523e;color:#fef4db;border-radius:50px;padding:6px 12px;font:700 12px system-ui,sans-serif}
+.how{margin:42px auto 0;max-width:750px;background:#fff0ce;color:var(--ink);border-radius:18px;border:2px solid var(--gold);padding:24px;text-align:center}
+.how h2{font-size:clamp(22px,3.3vw,28px);margin:0 0 9px;color:#8b2433}
+.how p{margin:0}
+.how a{display:inline-block;margin-top:16px;padding:10px 18px;border-radius:25px;background:var(--berry);color:white;text-decoration:none;font:700 14px system-ui,sans-serif}
+footer{text-align:center;padding:20px;color:#e5d0a4;font:13px system-ui,sans-serif}
+@media(max-width:530px){.books{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.book{padding:11px;border-radius:13px}.book img{height:auto;max-height:190px}.book h2{font-size:15px}.language-tabs button{min-width:62px;padding:9px 12px;font-size:13px}}
+</style>
+</head>
+<body>
+<header><a class="brand" href="/">AUTHORS ON A MISSION</a><a class="home" href="/">Back to homepage</a></header>
+<main>
+<section class="hero">
+<p class="eyebrow">Our illustrated stories</p>
+<h1>Find your next great story.</h1>
+<p class="intro">Explore our available books in the language you love. Every edition uses the original book artwork.</p>
+</section>
+<div class="language-tabs" role="tablist" aria-label="Choose the book language">
+<button role="tab" data-language="en" aria-selected="true">English</button>
+<button role="tab" data-language="de" aria-selected="false">Deutsch</button>
+<button role="tab" data-language="pt-PT" aria-selected="false">Português</button>
+<button role="tab" data-language="tr" aria-selected="false">Türkçe</button>
+<button role="tab" data-language="es" aria-selected="false">Español</button>
+<button role="tab" data-language="fr" aria-selected="false">Français</button>
+</div>
+<p id="availability" role="status" aria-live="polite">Loading available books…</p>
+<section id="books" class="books" aria-label="Available titles"></section>
+<section class="how"><h2>Your books, your language.</h2><p>If someone sent you a book gift, open the personal gift link from their message to read or download your PDFs. The gift link protects your copies and unlocks the matching language automatically.</p><a href="/#join">Explore the book collection</a></section>
+</main><footer>© Authors On A Mission</footer>
+<script>
+(()=>{
+'use strict';
+const backend='https://authors-on-a-mission-members.onrender.com';
+const labels={
+ en:{title:'Available in English',empty:'No approved books available in English yet.',edition:'English',how:'Your books, your language.'},
+ de:{title:'Auf Deutsch verfügbar',empty:'Zurzeit sind keine freigegebenen Bücher auf Deutsch verfügbar.',edition:'Deutsch',how:'Deine Bücher, deine Sprache.'},
+ 'pt-PT':{title:'Disponíveis em português',empty:'Ainda não há livros aprovados em português.',edition:'Português',how:'Os teus livros, no teu idioma.'},
+ tr:{title:'Türkçe kitaplar',empty:'Henüz Türkçe onaylanmış kitap yok.',edition:'Türkçe',how:'Kitapların, senin dilin.'},
+ es:{title:'Disponibles en español',empty:'Todavía no hay libros aprobados en español.',edition:'Español',how:'Tus libros, tu idioma.'},
+ fr:{title:'Disponibles en français',empty:'Aucun livre approuvé en français pour le moment.',edition:'Français',how:'Tes livres, ta langue.'}
+};
+const titles={
+ 'zachary-my-unique-hat-2026-11':{en:'Zachary and the “My Unique” Hat',de:'Zachary und der „My Unique“-Hut','pt-PT':'Zachary e o Chapéu My Unique'},
+ 'zachary-school-that-believed-in-him':{en:'Zachary and the School That Believed in Him',de:'Zachary und die Schule, die an ihn glaubte','pt-PT':'Zachary e a Escola que Acreditou Nele'},
+ 'zachary-school-that-made-room':{en:'Zachary and the School That Made Room',de:'Zachary und die Schule, die Platz machte','pt-PT':'Zachary e a Escola que Abriu Espaço'},
+ 'emir-boy-who-never-smiles':{en:'Emir and the Boy Who Never Smiles',de:'Emir und der Junge, der niemals lächelt',tr:'Emir ve Hiç Gülümsemeyen Çocuk',es:'Emir y el niño que nunca sonríe',fr:'Emir et le garçon qui ne souriait jamais'},
+ 'emir-barbershop-boys-and-salon-girls':{en:'Emir and the Barbershop Boys and Salon Girls',de:'Emir und die Barbershop-Jungs und Salon-Mädchen',tr:'Emir ve Berber Dükkânının Çocukları ve Kuaför Salonunun Kızları',es:'Emir y los chicos de la barbería y las chicas del salón',fr:'Emir et les garçons du salon de coiffure et les filles du salon'}
+};
+const order=Object.keys(titles),container=document.querySelector('#books'),message=document.querySelector('#availability'),tabs=[...document.querySelectorAll('[data-language]')];
+let all=[],loaded=false,language='en';
+function render(){
+ tabs.forEach(b=>b.setAttribute('aria-selected',String(b.dataset.language===language)));
+ document.documentElement.lang=language==='pt-PT'?'pt':language;
+ container.replaceChildren();
+ const valid=all.filter(x=>x.language===language&&Object.hasOwn(titles,x.slug)).sort((a,b)=>order.indexOf(a.slug)-order.indexOf(b.slug));
+ message.textContent=loaded?(valid.length?labels[language].title+' · '+valid.length+' books':labels[language].empty):'Loading available books…';
+ for(const item of valid){
+  const card=document.createElement('article');card.className='book';
+  const cover=document.createElement('img');cover.src=backend+'/storybook/cover?slug='+encodeURIComponent(item.slug);cover.alt=titles[item.slug][language]+' — original book cover';cover.loading='lazy';
+  const title=document.createElement('h2');title.textContent=titles[item.slug][language];
+  const badge=document.createElement('span');badge.className='edition';badge.textContent=labels[language].edition;
+  card.append(cover,title,badge);container.append(card);
+ }
+}
+tabs.forEach(b=>b.addEventListener('click',()=>{
+ language=b.dataset.language;
+ const u=new URL(location.href);u.searchParams.set('language',language);history.replaceState(null,'',u);
+ render();
+}));
+const selected=new URL(location.href).searchParams.get('language');
+if(Object.hasOwn(labels,selected))language=selected;
+render();
+fetch(backend+'/api/storybook/catalog',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('catalog unavailable');return r.json();}).then(data=>{
+ all=Array.isArray(data.editions)?data.editions:[];loaded=true;render();
+}).catch(()=>{message.textContent='The library is temporarily unavailable. Please return shortly.';});
+})();
+</script>
+</body></html>
