@@ -13,6 +13,44 @@ const tokenCode=(token,secret)=>{
  const mac=createHmac('sha256',secret).update('storybook-code:'+token).digest('hex');
  return String(parseInt(mac.slice(0,12),16)%10000).padStart(4,'0');
 };
+// Stream-check a ZIP without holding it in memory: walk the entries in order,
+// hash each stored PDF as it passes, then verify the small central directory.
+async function readZip(response,expected){
+ const reader=response.body.getReader();let buf=Buffer.alloc(0),total=0;
+ const pull=async()=>{const {value,done}=await reader.read();if(done)return false;const b=Buffer.from(value);total+=b.length;buf=buf.length?Buffer.concat([buf,b]):b;return true;};
+ const need=async n=>{while(buf.length<n)if(!await pull())fail('ZIP ended early');};
+ const take=async n=>{await need(n);const out=Buffer.from(buf.subarray(0,n));buf=buf.subarray(n);return out;};
+ const entries=[];
+ for(;;){
+  await need(4);const sig=buf.readUInt32LE(0);
+  if(sig===0x02014b50)break;
+  if(sig!==0x04034b50)fail('ZIP structure corrupt');
+  const h=await take(30);const name=(await take(h.readUInt16LE(26))).toString('utf8');await take(h.readUInt16LE(28));
+  const size=expected.get(name);if(size===undefined)fail('Unexpected ZIP entry: '+name);
+  const hash=createHash('sha256');let left=size;
+  while(left>0){if(!buf.length&&!await pull())fail('ZIP entry truncated: '+name);const n=Math.min(left,buf.length);hash.update(buf.subarray(0,n));buf=buf.subarray(n);left-=n;}
+  const d=await take(16);if(d.readUInt32LE(0)!==0x08074b50||d.readUInt32LE(8)!==size)fail('ZIP descriptor mismatch: '+name);
+  entries.push({entry:name,size,sha256:hash.digest('hex')});
+ }
+ while(await pull());
+ const tail=buf;
+ if(tail.length<22||tail.readUInt32LE(tail.length-22)!==0x06054b50)fail('ZIP end record missing');
+ const count=tail.readUInt16LE(tail.length-12);let at=0;
+ for(let i=0;i<count;i++){
+  if(tail.readUInt32LE(at)!==0x02014b50)fail('ZIP directory corrupt');
+  const n=tail.readUInt16LE(at+28),e=tail.readUInt16LE(at+30),c=tail.readUInt16LE(at+32);
+  const name=tail.subarray(at+46,at+46+n).toString('utf8');
+  if(!entries[i]||entries[i].entry!==name||entries[i].size!==tail.readUInt32LE(at+24))fail('ZIP directory mismatch: '+name);
+  at+=46+n+e+c;
+ }
+ if(count!==entries.length)fail('ZIP entry count mismatch');
+ return {entries,bytes:total,count};
+}
+const zipNames=(rows,lang)=>new Map(rows.map(r=>[bookZipName(r.slug,lang),r.size]));
+async function catalogRows(){
+ const r=await request('/api/storybook/catalog');if(r.status!==200)fail('Catalog returned '+r.status);
+ return (await r.json()).editions||[];
+}
 export async function testLiveStorybookRoutes(pool){
  const secret=process.env.AOM_BARBER_GIFT_SECRET||process.env.STRIPE_WEBHOOK_SECRET;
  if(!pool||!secret)return {skipped:'no database or gift-signing secret'};
@@ -38,26 +76,21 @@ async function testBarberGiftDownload(pool){
  if(opened.status!==200||!html.includes('action="/barber/redeem"')||!html.includes('<option value="de" selected>')||html.includes('name="code"'))
   fail('Barber gift page is not Language then Download');
  const timings={};
+ const barberRows=await catalogRows();
  for(const lang of ['de','en','pt-PT']){
   const redeem=await request('/barber/redeem?gift='+token+'&download=1&language='+encodeURIComponent(lang));
   if(redeem.status!==303)fail('Barber redeem failed '+lang);
   const started=performance.now();
   const zip=await request(redeem.headers.get('location'));
   const firstByte=performance.now()-started;
-  const body=Buffer.from(await zip.arrayBuffer());
+  const z=await readZip(zip,zipNames(barberRows.filter(x=>x.language===lang),lang));
   const total=performance.now()-started;
-  if(zip.status!==200||Number(zip.headers.get('content-length'))!==body.length||body.readUInt32LE(body.length-22)!==0x06054b50)fail('Barber ZIP incomplete '+lang);
-  let at=body.readUInt32LE(body.length-6);const entries=[];
-  for(let i=0;i<body.readUInt16LE(body.length-12);i++){
-   const n=body.readUInt16LE(at+28),size=body.readUInt32LE(at+24),offset=body.readUInt32LE(at+42);
-   const start=offset+30+body.readUInt16LE(offset+26)+body.readUInt16LE(offset+28);
-   entries.push({entry:body.subarray(at+46,at+46+n).toString(),size,sha256:sha(body.subarray(start,start+size))});
-   at+=46+n;
-  }
-  timings[lang]={books:entries.length,bytes:body.length,firstByteMs:Math.round(firstByte),totalMs:Math.round(total),source:zip.headers.get('x-aom-archive-source'),entries};
+  if(zip.status!==200||Number(zip.headers.get('content-length'))!==z.bytes)fail('Barber ZIP incomplete '+lang);
+  const entries=z.entries;
+  timings[lang]={books:entries.length,bytes:z.bytes,firstByteMs:Math.round(firstByte),totalMs:Math.round(total),source:zip.headers.get('x-aom-archive-source'),entries};
  }
  const de=timings.de.entries;
- if(de.length!==6||!de.some(e=>e.entry==='02_Emir_Series/03_Emir_Book_3_Meets_Zachary_de.pdf')||!de.some(e=>e.entry.startsWith('02_Emir_Series/'))||!de.some(e=>e.size===14389311&&e.sha256==='ec7acc227dad7ab3d92893887e96e7d1bcaf80a468779bbbb71e7f017f63a52d'))
+ if(de.length!==barberRows.filter(x=>x.language==='de').length||!de.some(e=>e.entry==='02_Emir_Series/03_Emir_Book_3_Meets_Zachary_de.pdf')||!de.some(e=>e.entry.startsWith('02_Emir_Series/'))||!de.some(e=>e.size===14389311&&e.sha256==='ec7acc227dad7ab3d92893887e96e7d1bcaf80a468779bbbb71e7f017f63a52d'))
   fail('German barber ZIP is missing Emir books or the original Book One');
  const qrGift={};
  for(const lang of ['en','de','fr','es','tr','pt-PT']){
@@ -114,25 +147,12 @@ async function runLiveStorybookRoutes(pool,secret){
    if(shelf.status!==200||!html.includes('class="books"')||(!['en','es','de','tr','fr','pt-PT'].includes(lang)&&html.includes('slug=emir-meets-zachary')))fail('Incorrect language shelf '+lang);
    const zipped=await request('/storybook/download-all?gift='+token,{headers});
    if(zipped.status!==200||!zipped.headers.get('content-type')?.includes('application/zip'))fail('Download All failed: '+lang+' HTTP '+zipped.status);
-   const zip=Buffer.from(await zipped.arrayBuffer());
-   if(zip.length<22||zip.readUInt32LE(zip.length-22)!==0x06054b50)fail('Download All is not a complete ZIP: '+lang);
-   const number=zip.readUInt16LE(zip.length-22+10);
-   if(number!==rows.length)fail('ZIP contains incorrect number of books: '+lang);
-   if(Number(zipped.headers.get('content-length'))!==zip.length)fail('ZIP advertised length mismatch: '+lang);
-   let central=zip.readUInt32LE(zip.length-22+16);
-   const seen=new Set();
-   for(let i=0;i<number;i++){
-    if(zip.readUInt32LE(central)!==0x02014b50)fail('ZIP directory corrupt: '+lang);
-    const length=zip.readUInt16LE(central+28),extra=zip.readUInt16LE(central+30),comment=zip.readUInt16LE(central+32);
-    const fname=zip.subarray(central+46,central+46+length).toString('utf8');
-    const entrySize=zip.readUInt32LE(central+24),offset=zip.readUInt32LE(central+42);
-    if(zip.readUInt32LE(offset)!==0x04034b50)fail('ZIP entry corrupt: '+fname);
-    const dataStart=offset+30+zip.readUInt16LE(offset+26)+zip.readUInt16LE(offset+28);
-    const item=rows.find(x=>fname===bookZipName(x.slug,lang));
-    if(!item||seen.has(fname)||entrySize!==item.size||sha(zip.subarray(dataStart,dataStart+entrySize))!==item.sha256)
-     fail('ZIP edition integrity failure: '+fname);
-    seen.add(fname);
-    central+=46+length+extra+comment;
+   const z=await readZip(zipped,zipNames(rows,lang));
+   if(z.count!==rows.length)fail('ZIP contains incorrect number of books: '+lang);
+   if(Number(zipped.headers.get('content-length'))!==z.bytes)fail('ZIP advertised length mismatch: '+lang);
+   for(const e of z.entries){
+    const item=rows.find(x=>e.entry===bookZipName(x.slug,lang));
+    if(!item||e.size!==item.size||e.sha256!==item.sha256)fail('ZIP edition integrity failure: '+e.entry);
    }
    archivesChecked++;
    for(const item of rows){
@@ -143,12 +163,13 @@ async function runLiveStorybookRoutes(pool,secret){
     const download=await request('/storybook/pdf'+path,{headers});
     if(download.status!==200||!download.headers.get('content-type')?.includes('application/pdf'))
      fail('Download failed: '+lang+' '+item.slug+' HTTP '+download.status);
-    const data=Buffer.from(await download.arrayBuffer());
-    if(data.length!==item.size||sha(data)!==item.sha256||data.subarray(0,5).toString('latin1')!=='%PDF-')
+    const h=createHash('sha256');let len=0,head=null;
+    for await(const chunk of download.body){const b=Buffer.from(chunk);if(!head)head=b.subarray(0,5);h.update(b);len+=b.length;}
+    if(len!==item.size||h.digest('hex')!==item.sha256||head?.toString('latin1')!=='%PDF-')
      fail('Downloaded PDF mismatches stored edition: '+lang+' '+item.slug);
     const disposition=download.headers.get('content-disposition')||'';
     if(!disposition.includes('attachment'))fail('Missing download disposition: '+lang+' '+item.slug);
-    checked++;bytesChecked+=data.length;
+    checked++;bytesChecked+=len;
    }
   }
   await pool.query('INSERT INTO aom_storybook_sources(source_hash,kind,expires_at,registered_at) VALUES($1,$2,now()+interval \'15 minutes\',now())',[freeSource,'free']);
@@ -161,8 +182,8 @@ async function runLiveStorybookRoutes(pool,secret){
    fail('Free gift page has extra steps');
   const freeZip=await request('/storybook/download-all?gift='+freeToken+'&language=en');
   if(freeZip.status!==200||!freeZip.headers.get('content-type')?.includes('application/zip'))fail('Free gift two-click download failed');
-  const freeData=Buffer.from(await freeZip.arrayBuffer());
-  if(freeData.length<22||freeData.readUInt32LE(freeData.length-22)!==0x06054b50||freeData.readUInt16LE(freeData.length-12)!==groups.en.length)
+  const freeData=await readZip(freeZip,zipNames(groups.en,'en'));
+  if(freeData.count!==groups.en.length)
    fail('Free gift ZIP incomplete');
   const unauthorized=await request('/storybook/pdf?gift='+randomBytes(32).toString('hex')+'&slug=emir-boy-who-never-smiles');
   if(unauthorized.status===200)fail('Unauthenticated download was permitted');
