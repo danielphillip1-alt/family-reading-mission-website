@@ -102,7 +102,7 @@ open.addEventListener('click',download);openBig.addEventListener('click',downloa
 addEventListener('pageshow',()=>{open.disabled=openBig.disabled=false;});
 fetch(backend+'/api/storybook/catalog',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{
  if(!data||!Array.isArray(data.editions))return;
- counts={};for(const code of codes)counts[code]=new Set(data.editions.filter(e=>e.language===code&&e.slug!=='emir-meets-zachary').map(e=>e.slug)).size;
+ counts={};for(const code of codes)counts[code]=new Set(data.editions.filter(e=>e.language===code).map(e=>e.slug)).size;
  for(const b of buttons)b.title=counts[b.dataset.lang]?counts[b.dataset.lang]+' 📚':copy[b.dataset.lang].soon;
 }).catch(()=>{});
 choose(lang);
