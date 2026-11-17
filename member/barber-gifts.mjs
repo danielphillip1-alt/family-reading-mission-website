@@ -1,6 +1,27 @@
 import {createHash,createHmac,randomBytes} from 'node:crypto';
+import {deflateRawSync} from 'node:zlib';
 import {sendTransactionalMail,mailConfigured} from './mail.mjs';
 import {bundleTitle,isBundleBook,shelfPage} from './gift-shelf.mjs';
+
+function crc32(buf){let crc=0xffffffff;for(const byte of buf){crc^=byte;for(let i=0;i<8;i++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return (crc^0xffffffff)>>>0;}
+function zipBooks(entries){
+ const locals=[],centrals=[];let offset=0;
+ for(const {name,bytes} of entries){
+  const file=Buffer.from(name),raw=Buffer.from(bytes),packed=deflateRawSync(raw),crc=crc32(raw);
+  const local=Buffer.alloc(30);local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(20,4);local.writeUInt16LE(8,6);local.writeUInt16LE(8,8);local.writeUInt32LE(crc,14);local.writeUInt32LE(packed.length,18);local.writeUInt32LE(raw.length,22);local.writeUInt16LE(file.length,26);
+  locals.push(local,file,packed);
+  const central=Buffer.alloc(46);central.writeUInt32LE(0x02014b50,0);central.writeUInt16LE(20,4);central.writeUInt16LE(20,6);central.writeUInt16LE(8,8);central.writeUInt16LE(8,10);central.writeUInt32LE(crc,16);central.writeUInt32LE(packed.length,20);central.writeUInt32LE(raw.length,24);central.writeUInt16LE(file.length,28);central.writeUInt32LE(offset,42);
+  centrals.push(central,file);offset+=local.length+file.length+packed.length;
+ }
+ const centralBytes=centrals.reduce((n,b)=>n+b.length,0),end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(entries.length,8);end.writeUInt16LE(entries.length,10);end.writeUInt32LE(centralBytes,12);end.writeUInt32LE(offset,16);
+ return Buffer.concat([...locals,...centrals,end]);
+}
+function freeBundlePage(lang){
+ const labels={en:'DOWNLOAD ALL BOOKS',de:'ALLE BÜCHER HERUNTERLADEN','pt-PT':'DESCARREGAR TODOS OS LIVROS'};
+ const title=labels[lang]||labels.en;
+ return '<!doctype html><html lang="'+safe(lang)+'"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>'+title+'</title><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 20% 15%,#12b7e9,transparent 45%),radial-gradient(circle at 85% 75%,#fb6f9b,transparent 45%),linear-gradient(140deg,#0b2777,#6627a7);font-family:system-ui;color:white;text-align:center}main{padding:35px 25px;max-width:720px}h1{font-size:clamp(42px,9vw,82px);line-height:1.05;text-shadow:4px 5px #142153;margin:0 0 35px}.gift{font-size:90px;margin-bottom:15px}.button{display:inline-block;background:#ffdf38;color:#142354;border-radius:60px;padding:22px 32px;font-size:clamp(20px,4vw,31px);font-weight:1000;text-decoration:none;box-shadow:0 10px #ed7e28}.button:focus-visible{outline:4px solid white}</style><main><div class="gift" aria-hidden="true">🎁📚✨</div><h1>'+title+'</h1><a class="button" href="/barber/free-bundle.zip?language='+encodeURIComponent(lang)+'">'+title+'</a></main></html>';
+}
+
 const LINK='plink_1UboGGRuZKBP2B3nzmcAPiQL';
 const langs=new Set(['en','de','pt-PT']);
 const REQUIRED_BUNDLE_SLUGS=['zachary-my-unique-hat-2026-11','zachary-school-that-believed-in-him','emir-boy-who-never-smiles','emir-barbershop-boys-and-salon-girls'];
@@ -101,6 +122,26 @@ if(!url.pathname.startsWith('/barber/'))return false;
 if(!stripe||!pool){send(res,503,page('Service unavailable','Please contact support.'));return true;}
 try{
 const path=url.pathname,id=url.searchParams.get('session_id'),gift=url.searchParams.get('gift'),access=url.searchParams.get('access'),slug=url.searchParams.get('slug');
+
+if(path==='/barber/free-books'&&req.method==='GET'){
+ const lang=langs.has(url.searchParams.get('language'))?url.searchParams.get('language'):'en';
+ send(res,200,freeBundlePage(lang));return true;
+}
+if(path==='/barber/free-bundle.zip'&&req.method==='GET'){
+ const lang=langs.has(url.searchParams.get('language'))?url.searchParams.get('language'):'en';
+ const available=(await titles(pool,new Date(),lang)).filter(isBundleBook);
+ if(!available.length){send(res,503,page('Books being prepared','<p>There are no approved books ready for this language yet.</p>'));return true;}
+ const entries=[];
+ for(const slug of available){
+  const q=await pool.query(`SELECT f.pdf_content FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.slug=$1 AND r.status='published' AND r.published_at<=now()
+   UNION ALL SELECT f.pdf_content FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.slug=$1 AND r.status='published' AND r.published_at<=now() LIMIT 1`,[slug,lang]);
+  if(q.rowCount)entries.push({name:slug+'-'+lang+'.pdf',bytes:q.rows[0].pdf_content});
+ }
+ if(!entries.length){send(res,503,page('Books being prepared','<p>Book files are not ready yet.</p>'));return true;}
+ const zip=zipBooks(entries);
+ res.writeHead(200,{'Content-Type':'application/zip','Content-Disposition':'attachment; filename="Authors-On-A-Mission-Free-Books-'+lang+'.zip"','Content-Length':zip.length,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(zip);return true;
+}
+
 if(path==='/barber/checkout'&&req.method==='GET'){
   const sets=await Promise.all([...langs].map(l=>titles(pool,new Date(),l)));
   const same=hasFullBundle(sets);
