@@ -37,7 +37,7 @@ export async function testLiveStorybookRoutes(pool){
    const gift=await request('/storybook/gift?gift='+token+'&language='+encodeURIComponent(lang));
    if(gift.status!==200||!(await gift.text()).includes('name="language"'))fail('Gift page failed for '+lang);
    const params=new URLSearchParams({gift:token,language:lang,code:tokenCode(token,secret)});
-   const opened=await request('/storybook/open',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params});
+   const opened=await request('/storybook/open',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:new URL(process.env.APP_URL).origin},body:params});
    if(opened.status!==303)fail('Gift unlock rejected '+lang+': '+opened.status);
    const cookie=opened.headers.get('set-cookie')?.split(';')[0];
    if(!cookie||!cookie.includes('storybook_'))fail('Gift session cookie absent for '+lang);
