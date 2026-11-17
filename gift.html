@@ -8,12 +8,21 @@
 .hotspot:focus-visible{outline:4px dashed #fff;border-radius:40px;outline-offset:3px}
 #openGift{left:26%;top:57.05%;width:48%;height:6.5%;border-radius:100px}
 .home{left:19%;top:0;width:38%;height:4.4%;position:absolute;z-index:3}
-.nameplate{position:absolute;z-index:3;display:none;left:24.5%;top:33.35%;width:51%;height:4.4%;background:linear-gradient(110deg,#fff6de,#fffaf0,#fff2d7);border-radius:20px;text-align:center;align-items:center;justify-content:center;padding:0 8px;line-height:1.05;font:900 clamp(11px,2.55vw,30px)/1.2 Georgia,serif;color:#073e2b;text-shadow:0 1px 0 #fff}
+.nameplate{position:absolute;z-index:3;display:none;left:24.5%;top:33.2%;width:51%;height:6.9%;background:linear-gradient(110deg,#fff6de,#fffaf0,#fff2d7);border-radius:20px;text-align:center;align-items:center;justify-content:center;padding:0 8px;line-height:1.05;font:900 clamp(11px,2.55vw,30px)/1.2 Georgia,serif;color:#073e2b;text-shadow:0 1px 0 #fff}
 .nameplate .sender{color:#920a16}
-.language{position:absolute;z-index:5;top:63.65%;height:2.85%;border:1.8px solid #e6bb5e;border-radius:999px;font:900 clamp(9px,1.45vw,17px)/1.1 Georgia,serif;display:flex;align-items:center;justify-content:center;gap:4%;cursor:pointer;background:linear-gradient(#fffefa,#f8eddb);color:#122c20;white-space:nowrap;padding:0 3px;box-shadow:0 1px 3px #0e3f2a44}
+.language{position:absolute;z-index:5;border:1.8px solid #e6bb5e;border-radius:999px;font:900 clamp(9px,1.45vw,17px)/1.1 Georgia,serif;display:flex;align-items:center;justify-content:center;gap:4%;cursor:pointer;background:linear-gradient(#fffefa,#f8eddb);color:#122c20;white-space:nowrap;padding:0 3px;box-shadow:0 1px 3px #0e3f2a44}
 .language[aria-pressed=true]{background:linear-gradient(#118253,#00552e);border-color:#008250;color:white;text-shadow:0 1px 1px #003b29}
 .language:focus-visible{outline:3px solid #f0b526;outline-offset:3px}
-#en{left:39.75%;width:15.25%}#de{left:56.45%;width:14.45%}#pt{left:73%;width:15.1%}
+.lang-overlay{position:absolute;z-index:5;left:39.3%;width:49.6%;top:63.95%;height:4.35%;display:grid;grid-template-columns:repeat(3,1fr);gap:4% 2.5%;padding:.35% .6%;background:linear-gradient(#fffaf0,#fbf0da);border-radius:999px;line-height:1}
+.lang-overlay .language{position:static;height:auto;font-size:clamp(6px,1.2vw,14px)}
+.lang-panel{display:none;max-width:1122px;margin:0 auto;padding:14px 16px 18px;background:radial-gradient(ellipse at top,#fffcec,#ffe4a1);border-block:3px double #b77b2b;text-align:center;color:#073e2b}
+.lang-panel h2{margin:0 0 10px;font:900 20px/1.2 Georgia,serif}
+.lang-panel .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.lang-panel .language{position:static;height:48px;font:800 17px/1.1 system-ui,sans-serif;border-width:2px}
+.lang-panel .open-big{display:block;width:100%;margin-top:14px;min-height:54px;border:3px solid #f3bf5c;border-radius:50px;background:linear-gradient(#b3121c,#7c0d14);color:#fff8dd;font:900 21px Georgia,serif;cursor:pointer}
+.lang-panel .open-big[disabled],.hotspot[disabled]{opacity:.7;cursor:progress}
+.lang-panel .status{margin:10px 0 0;font:700 15px/1.4 system-ui,sans-serif;min-height:1.4em}
+@media(max-width:650px){.lang-panel{display:block}}
 .hint{display:none;position:absolute;left:18%;width:64%;bottom:44%;z-index:8;pointer-events:none;padding:8px;background:#fffbea;border:2px solid #c78b1c;border-radius:10px;text-align:center;line-height:1.35;color:#184a36;font:700 clamp(10px,1.25vw,15px)/1.25 system-ui}
 footer{max-width:1122px;margin:auto;text-align:center;background:#01402e;color:#fff;font:13px/1.5 system-ui;padding:12px 8px}footer a{color:#fff}
 @media(max-width:650px){.nameplate{border-radius:8px;line-height:1.08;font-size:clamp(9px,2.1vw,15px)}.language{font-size:clamp(6px,1.9vw,12px);border-width:1px;gap:2px}.hint{left:12%;width:76%}}
@@ -23,58 +32,79 @@ footer{max-width:1122px;margin:auto;text-align:center;background:#01402e;color:#
 <a class="home" href="/" aria-label="Authors On A Mission homepage"></a>
 <div class="nameplate" id="nameplate" aria-live="polite"></div>
 <button class="hotspot" id="openGift" type="button" aria-label="Open your personal gift and download books">Open Your Gift</button>
-<button class="language" id="en" type="button" aria-pressed="true" aria-label="Select English">🇬🇧 English</button>
-<button class="language" id="de" type="button" aria-pressed="false" aria-label="Deutsch auswählen">🇩🇪 Deutsch</button>
-<button class="language" id="pt" type="button" aria-pressed="false" aria-label="Selecionar Português">🇧🇷 Português</button>
+<div class="lang-overlay" role="group" aria-label="Choose your language"></div>
 <div class="hint" id="hint" role="status" aria-live="polite"></div></main>
+<section class="lang-panel" aria-label="Choose your language"><h2 id="panelTitle">Choose Your Language</h2><div class="grid" role="group" aria-labelledby="panelTitle"></div><button class="open-big" id="openBig" type="button">🎁 Open Your Gift</button><p class="status" id="panelStatus" role="status" aria-live="polite"></p></section>
 <footer><a href="/impressum.html">Impressum</a> · <a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a></footer>
 <script>
 (()=>{'use strict';
+// Barbershop QR gift: choose one of six languages, then "Open Your Gift"
+// downloads that language's numbered book bundle. A private gift link
+// (?gift=…) also records the recipient's claim before the download.
+const backend='https://authors-on-a-mission-members.onrender.com';
 const q=new URLSearchParams(location.search);
-const token=(q.get('gift')||'').trim();
-const valid=/^[a-f0-9]{64}$/i.test(token);
+const token=(q.get('gift')||'').trim().toLowerCase();
+const valid=/^[a-f0-9]{64}$/.test(token);
 const names=[q.get('to'),q.get('from'),q.get('shop')].map(x=>String(x||'').trim().slice(0,80));
-const langs={en:'en',de:'de',pt:'pt-PT'};
+const order=[['en','🇬🇧','English'],['de','🇩🇪','Deutsch'],['fr','🇫🇷','Français'],['es','🇪🇸','Español'],['tr','🇹🇷','Türkçe'],['pt-PT','🇵🇹','Português']];
+const claimLanguages=['en','de','pt-PT'];
 const copy={
- en:{sent:'sent you a gift!',from:'from',missing:'This is the gift preview. To receive your books, open your unique gift link from the gift email.',opening:'Opening your personal gift…',failed:'Unable to open your gift right now. Please try again using the link in your gift email.'},
- de:{sent:'hat dir ein Buchgeschenk geschickt!',from:'von',missing:'Dies ist die Geschenkvorschau. Öffne den persönlichen Geschenklink aus deiner E-Mail, um deine Bücher zu erhalten.',opening:'Dein persönliches Geschenk wird geöffnet…',failed:'Dein Geschenk kann gerade nicht geöffnet werden. Bitte versuche es erneut über den Link in deiner E-Mail.'},
- pt:{sent:'enviou-te livros de presente!',from:'de',missing:'Esta é a pré-visualização do presente. Abre o teu link pessoal no e-mail para receberes os livros.',opening:'A abrir o teu presente pessoal…',failed:'Não foi possível abrir o teu presente agora. Tenta novamente através do link do e-mail.'}
+ en:{gift:'A storybook gift, just for you!',title:'Choose Your Language',open:'Open Your Gift',sent:'sent you a gift!',from:'from',downloading:'Your books are downloading. On iPhone, find the ZIP in Files › Downloads.',soon:'Books in this language are coming soon. Please choose another language.'},
+ de:{gift:'Ein Büchergeschenk, nur für dich!',title:'Wähle deine Sprache',open:'Öffne dein Geschenk',sent:'hat dir ein Buchgeschenk geschickt!',from:'von',downloading:'Deine Bücher werden heruntergeladen. Auf dem iPhone findest du die ZIP-Datei unter Dateien › Downloads.',soon:'Bücher in dieser Sprache folgen bald. Bitte wähle eine andere Sprache.'},
+ fr:{gift:'Un cadeau de livres, rien que pour toi !',title:'Choisis ta langue',open:'Ouvre ton cadeau',sent:'t’a envoyé un cadeau !',from:'de',downloading:'Tes livres sont en cours de téléchargement. Sur iPhone, retrouve le ZIP dans Fichiers › Téléchargements.',soon:'Les livres dans cette langue arrivent bientôt. Choisis une autre langue.'},
+ es:{gift:'¡Un regalo de libros solo para ti!',title:'Elige tu idioma',open:'Abre tu regalo',sent:'¡te ha enviado un regalo!',from:'de',downloading:'Tus libros se están descargando. En iPhone, encuentra el ZIP en Archivos › Descargas.',soon:'Los libros en este idioma llegarán pronto. Elige otro idioma.'},
+ tr:{gift:'Sadece senin için bir kitap hediyesi!',title:'Dilini seç',open:'Hediyeni aç',sent:'sana bir hediye gönderdi!',from:'–',downloading:'Kitapların indiriliyor. iPhone’da ZIP dosyasını Dosyalar › İndirilenler bölümünde bulabilirsin.',soon:'Bu dildeki kitaplar yakında geliyor. Lütfen başka bir dil seç.'},
+ 'pt-PT':{gift:'Um presente de livros, só para ti!',title:'Escolhe o teu idioma',open:'Abre o teu presente',sent:'enviou-te livros de presente!',from:'de',downloading:'Os teus livros estão a ser descarregados. No iPhone, encontra o ZIP em Ficheiros › Transferências.',soon:'Os livros neste idioma chegam em breve. Escolhe outro idioma.'}
 };
-let lang=Object.prototype.hasOwnProperty.call(langs,q.get('language'))?q.get('language'):'en';
+const codes=order.map(x=>x[0]);
+const wanted=q.get('language')==='pt'?'pt-PT':q.get('language');
+const device=(navigator.language||'').toLowerCase();
+let lang=codes.includes(wanted)?wanted:(codes.find(c=>device===c.toLowerCase())||codes.find(c=>device.split('-')[0]===c.split('-')[0])||'en');
+let counts=null;
+const overlay=document.querySelector('.lang-overlay'),grid=document.querySelector('.lang-panel .grid');
+const buttons=[];
+for(const [code,flag,label] of order)for(const box of [overlay,grid]){
+ const b=document.createElement('button');b.type='button';b.className='language';b.dataset.lang=code;b.lang=code;
+ b.textContent=flag+' '+label;b.setAttribute('aria-pressed','false');
+ b.addEventListener('click',()=>choose(code));box.append(b);buttons.push(b);
+}
 const nameplate=document.getElementById('nameplate');
-const hint=document.getElementById('hint');
-function show(message){hint.textContent=message;hint.style.display='block';}
+const hint=document.getElementById('hint'),panelStatus=document.getElementById('panelStatus');
+const open=document.getElementById('openGift'),openBig=document.getElementById('openBig');
+function say(message){hint.textContent=message;hint.style.display=message?'block':'none';panelStatus.textContent=message;}
 function drawNames(){
  nameplate.replaceChildren();
- if(!valid||!names[0]||!names[1]){nameplate.style.display='none';return;}
- const lead=document.createElement('span');
- const sender=document.createElement('span');
- sender.className='sender';
- const tail=document.createElement('span');
- lead.textContent=names[0]+', ';
- sender.textContent=names[1];
+ if(!valid||!names[0]||!names[1]){nameplate.textContent=copy[lang].gift;nameplate.style.display='flex';return;}
+ const lead=document.createElement('span'),sender=document.createElement('span'),tail=document.createElement('span');
+ sender.className='sender';lead.textContent=names[0]+', ';sender.textContent=names[1];
  tail.textContent=names[2]?' '+copy[lang].from+' '+names[2]+' '+copy[lang].sent:' '+copy[lang].sent;
- nameplate.append(lead,sender,tail);
- nameplate.style.display='flex';
+ const line=document.createElement('p');line.style.margin='0';line.append(lead,sender,tail);nameplate.append(line);nameplate.style.display='flex';
 }
 function choose(code){
  lang=code;document.documentElement.lang=code;
- for(const id of Object.keys(langs))document.getElementById(id).setAttribute('aria-pressed',String(id===code));
- if(hint.style.display==='block'&&!valid)show(copy[lang].missing);
- drawNames();
+ for(const b of buttons)b.setAttribute('aria-pressed',String(b.dataset.lang===code));
+ document.getElementById('panelTitle').textContent=copy[code].title;
+ openBig.textContent='🎁 '+copy[code].open;open.setAttribute('aria-label',copy[code].open);
+ say('');drawNames();
 }
-for(const id of Object.keys(langs))document.getElementById(id).addEventListener('click',()=>choose(id));
-const open=document.getElementById('openGift');
-open.addEventListener('click',()=>{
- if(!valid){location.assign('https://authors-on-a-mission-members.onrender.com/barber/free-books?language='+encodeURIComponent(langs[lang]));return;}
- const dest=new URL('https://authors-on-a-mission-members.onrender.com/barber/redeem');
- dest.searchParams.set('gift',token.toLowerCase());
- dest.searchParams.set('language',langs[lang]);
- open.disabled=true;
- show(copy[lang].opening);
- location.assign(dest.href);
-});
-addEventListener('pageshow',()=>{open.disabled=false;hint.style.display='';});
+function download(){
+ if(open.disabled)return;
+ if(counts&&!counts[lang]){say(copy[lang].soon);return;}
+ const dest=valid&&claimLanguages.includes(lang)
+  ?backend+'/barber/redeem?'+new URLSearchParams({gift:token,language:lang,download:'1'})
+  :backend+'/barber/free-bundle.zip?'+new URLSearchParams({language:lang});
+ open.disabled=openBig.disabled=true;
+ say(copy[lang].downloading);
+ location.assign(dest);
+ setTimeout(()=>{open.disabled=openBig.disabled=false;},6000);
+}
+open.addEventListener('click',download);openBig.addEventListener('click',download);
+addEventListener('pageshow',()=>{open.disabled=openBig.disabled=false;});
+fetch(backend+'/api/storybook/catalog',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{
+ if(!data||!Array.isArray(data.editions))return;
+ counts={};for(const code of codes)counts[code]=new Set(data.editions.filter(e=>e.language===code&&e.slug!=='emir-meets-zachary').map(e=>e.slug)).size;
+ for(const b of buttons)b.title=counts[b.dataset.lang]?counts[b.dataset.lang]+' 📚':copy[b.dataset.lang].soon;
+}).catch(()=>{});
 choose(lang);
 })();
 </script></body></html>
