@@ -6,6 +6,7 @@ import {sendTransactionalMail,mailConfigured} from './mail.mjs';
 import {giftArt} from './gift-shelf-art.mjs';
 import {storybookAdminPage} from './storybook-admin.mjs';
 import {shelfPage,isBundleBook,bundleTitle} from './gift-shelf.mjs';
+import {streamBookZip} from './zip-library.mjs';
 
 const SITE='https://theauthorsmission.de';
 const languages={en:'English','pt-PT':'Português',de:'Deutsch',tr:'Türkçe',fr:'Français',es:'Español'};
@@ -134,6 +135,27 @@ async function deliverFile(pool,res,slug,lang,inline){
   if(!res.write(row.bytes)&&!res.destroyed)await once(res,'drain',{signal:AbortSignal.timeout(15000)});
  }
  res.end();
+}
+
+async function deliverAllBooks(pool,res,slugs,lang){
+ const books=[];
+ for(const slug of slugs){
+  const source=await fileFor(pool,slug,lang);
+  if(!source)throw Error('A requested edition is unavailable');
+  books.push({...source,slug,size:Number(source.size)});
+ }
+ const readChunks=async function*(book){
+  for(let offset=1;offset<=book.size;offset+=chunkSize){
+   const row=book.storage_key
+    ?(await pool.query('SELECT substring(pdf_content FROM $3 FOR 524288) AS bytes FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',[book.storage_key,book.sha256,offset])).rows[0]
+    :(await pool.query('SELECT bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 AND part=$3',[book.slug,lang,(offset-1)/chunkSize])).rows[0];
+   if(!row?.bytes?.length)throw Error('Missing archive PDF bytes');
+   yield row.bytes;
+  }
+ };
+ res.writeHead(200,{...headers,'Content-Type':'application/zip',
+  'Content-Disposition':'attachment; filename="Authors_On_A_Mission_'+lang+'_Books.zip"'});
+ await streamBookZip({res,language:lang,books,readChunks});
 }
 
 // The gifted library is a directory of individually approved, fully stored PDFs.
@@ -430,6 +452,12 @@ export async function handleStorybook({req,res,url,pool,stripe}){
   }
   const slugs=await availableLanguageBooks(pool,lang);
   const slug=url.searchParams.get('slug');
+  if(method==='GET'&&path==='/storybook/download-all'){
+   if(!slugs.length){send(res,404,'No approved books available','text/plain');return true;}
+   try{await deliverAllBooks(pool,res,slugs,lang);}
+   catch(error){console.error('Secure book ZIP delivery failed',error?.code||error?.name);if(!res.headersSent)send(res,500,'Download unavailable','text/plain');else res.destroy();}
+   return true;
+  }
   if(method==='GET'&&path==='/storybook/pdf'&&(slugs.includes(slug)||(slug===bundleSlug&&slugs.length===12&&await bundleReady(pool,lang)))){
    await deliverFile(pool,res,slug,lang,slug!==bundleSlug&&url.searchParams.get('inline')==='1');return true;
   }
@@ -439,7 +467,9 @@ export async function handleStorybook({req,res,url,pool,stripe}){
    send(res,200,page(title,'<p><a class="btn" href="'+escape(urlFor('/storybook/shelf',{gift}))+'">‹ '+escape(languages[lang])+'</a></p><iframe style="width:100%;height:75vh;border:0" title="'+escape(title)+'" src="'+escape(inline)+'"></iframe><p><a href="'+escape(inline)+'">Open PDF</a></p>',lang));return true;
   }
   if(path==='/storybook/shelf'&&method==='GET'){
-   const merged=slugs.length===12&&await bundleReady(pool,lang);const actions='<div style="background:#fff2cc;text-align:center;padding:12px"><strong>'+labels[3]+'</strong>'+(merged?'<p><a class="button" href="'+escape(urlFor('/storybook/pdf',{gift,slug:bundleSlug}))+'">'+labels[1]+'</a></p>':'')+'<form method="post" action="/storybook/finish"><input type="hidden" name="gift" value="'+gift+'"><button class="button secondary">'+labels[2]+'</button></form></div>';
+   const allLabel={en:'Download all available books (ZIP)',de:'Alle verfügbaren Bücher herunterladen (ZIP)','pt-PT':'Descarregar todos os livros disponíveis (ZIP)',tr:'Tüm mevcut kitapları indir (ZIP)',es:'Descargar todos los libros disponibles (ZIP)',fr:'Télécharger tous les livres disponibles (ZIP)'}[lang]||'Download all available books (ZIP)';
+   const bulkAction=slugs.length?'<p><a class="button" href="'+escape(urlFor('/storybook/download-all',{gift}))+'">'+escape(allLabel)+' ('+slugs.length+')</a></p>':'';
+   const merged=slugs.length===12&&await bundleReady(pool,lang);const actions='<div style="background:#fff2cc;text-align:center;padding:12px"><strong>'+labels[3]+'</strong>'+bulkAction+(merged?'<p><a class="button" href="'+escape(urlFor('/storybook/pdf',{gift,slug:bundleSlug}))+'">'+labels[1]+'</a></p>':'')+'<form method="post" action="/storybook/finish"><input type="hidden" name="gift" value="'+gift+'"><button class="button secondary">'+labels[2]+'</button></form></div>';
    const html=shelfPage({lang,available:slugs,otherEditions:[],order:slugs,link:(view,book)=>urlFor(view==='reader'?'/storybook/read':'/storybook/pdf',{gift,slug:book})})
     .replace('content="no-referrer"','content="strict-origin"').replace('<ul class="books">',()=>actions+'<ul class="books">');
    send(res,200,html);return true;
