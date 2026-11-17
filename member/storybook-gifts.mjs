@@ -328,6 +328,14 @@ export async function handleStorybook({req,res,url,pool,stripe}){
  }
  if(path==='/storybook/cover'&&method==='GET'){
   const slug=url.searchParams.get('slug');
+  if(slug==='zachary-my-unique-hat-2026-11'&&url.searchParams.get('language')==='de'){
+   const encoded=await readFile(new URL('./approved-covers/zachary-book1-de.jpg.b64',import.meta.url),'utf8');
+   const bytes=Buffer.from(encoded.trim(),'base64');
+   if(bytes.length<100000||bytes[0]!==0xff||bytes[1]!==0xd8){send(res,503,'Cover temporarily unavailable','text/plain');return true;}
+   res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':bytes.length,
+    'X-Content-Type-Options':'nosniff','Cache-Control':'public,max-age=3600'});
+   res.end(bytes);return true;
+  }
   if(!isBundleBook(slug)||slug==='emir-meets-zachary'||!giftArt[slug]){
    send(res,404,'Cover unavailable','text/plain');return true;
   }
