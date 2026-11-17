@@ -66,7 +66,7 @@ function choose(code){
 for(const id of Object.keys(langs))document.getElementById(id).addEventListener('click',()=>choose(id));
 const open=document.getElementById('openGift');
 open.addEventListener('click',()=>{
- if(!valid){show(copy[lang].missing);return;}
+ if(!valid){location.assign('https://authors-on-a-mission-members.onrender.com/barber/free-books?language='+encodeURIComponent(langs[lang]));return;}
  const dest=new URL('https://authors-on-a-mission-members.onrender.com/barber/redeem');
  dest.searchParams.set('gift',token.toLowerCase());
  dest.searchParams.set('language',langs[lang]);
