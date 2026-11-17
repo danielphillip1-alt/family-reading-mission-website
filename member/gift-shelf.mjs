@@ -7,6 +7,7 @@ export const bundleBooks = [
  ['zachary-school-that-made-room','Zachary and the School That Made Room','Zachary und die Schule, die Platz machte','Zachary e a Escola que Abriu Espaço'],
  ['zachary-biggest-lesson-yet','Zachary and the Biggest Lesson Yet','Zachary und die größte Lektion','Zachary e a Maior Lição'],
  ['zachary-foundation-of-something-great','Zachary and the Foundation of Something Great','Zachary und das Fundament für etwas Großes','Zachary e os Alicerces de Algo Grandioso'],
+ ['zachary-night-everyone-belonged','Zachary and the Night Everyone Belonged','Zachary und die Nacht, in der alle dazugehörten','Zachary e a Noite em que Todos Pertenceram'],
  ['emir-boy-who-never-smiles','Emir and the Boy Who Never Smiles'],
  ['emir-barbershop-boys-and-salon-girls','Emir and the Barbershop Boys and Salon Girls'],
  ['emir-meets-zachary','Emir Meets Zachary','Emir trifft Zachary'],
@@ -24,6 +25,7 @@ const translatedTitles={
  'zachary-school-that-made-room':'Zachary et l’école qui a fait de la place',
  'zachary-biggest-lesson-yet':'Zachary et la plus grande leçon',
  'zachary-foundation-of-something-great':'Zachary et les fondations d’un grand projet',
+ 'zachary-night-everyone-belonged':'Zachary et la soirée où chacun avait sa place',
  'emir-boy-who-never-smiles':'Emir et le garçon qui ne souriait jamais',
  'emir-barbershop-boys-and-salon-girls':'Emir et les garçons du salon de coiffure et les filles du salon',
  'emir-meets-zachary':'Emir rencontre Zachary'
@@ -34,6 +36,7 @@ const translatedTitles={
  'zachary-school-that-made-room':'Zachary y la escuela que abrió espacio',
  'zachary-biggest-lesson-yet':'Zachary y la lección más grande',
  'zachary-foundation-of-something-great':'Zachary y los cimientos de algo grande',
+ 'zachary-night-everyone-belonged':'Zachary y la noche en que todos tuvieron su lugar',
  'emir-boy-who-never-smiles':'Emir y el niño que nunca sonríe',
  'emir-barbershop-boys-and-salon-girls':'Emir y los chicos de la barbería y las chicas del salón',
  'emir-meets-zachary':'Emir conoce a Zachary'
@@ -44,6 +47,7 @@ const translatedTitles={
  'zachary-school-that-made-room':'Zachary ve Herkese Yer Açan Okul',
  'zachary-biggest-lesson-yet':'Zachary ve En Büyük Ders',
  'zachary-foundation-of-something-great':'Zachary ve Büyük Bir Şeyin Temeli',
+ 'zachary-night-everyone-belonged':'Zachary ve Herkesin Ait Olduğu Gece',
  'emir-boy-who-never-smiles':'Emir ve Hiç Gülümsemeyen Çocuk',
  'emir-barbershop-boys-and-salon-girls':'Emir ve Berber Dükkânının Çocukları ve Kuaför Salonunun Kızları',
  'emir-meets-zachary':'Emir Zachary ile Tanışıyor'
@@ -63,6 +67,7 @@ const readingOrder={
  'zachary-school-that-made-room':['Zachary',3],
  'zachary-biggest-lesson-yet':['Zachary',4],
  'zachary-foundation-of-something-great':['Zachary',5],
+ 'zachary-night-everyone-belonged':['Zachary',6],
  'emir-boy-who-never-smiles':['Emir',1],
  'emir-barbershop-boys-and-salon-girls':['Emir',2],
  'emir-meets-zachary':['Emir',3]

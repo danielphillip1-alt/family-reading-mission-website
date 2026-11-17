@@ -45,7 +45,13 @@ const approved={
  'zachary-foundation-of-something-great:fr':{size:6191063,sha256:'7a85a360db46aa4f09134e4cd14b8c9e21d51951efd30ae6c3e65f897eeef72f'},
  'zachary-foundation-of-something-great:de':{size:6193604,sha256:'0b9dea57c067fae9c84e785f279a551f95fd11e83cfcac698f2be3db4b189b16'},
  'zachary-foundation-of-something-great:pt-PT':{size:6188914,sha256:'d7966ccb68d28b9ad7f0c1b2b3cc63713295c383bffda77ed6bde233538567c0'},
- 'zachary-foundation-of-something-great:tr':{size:6184937,sha256:'ceda4fe14f18754a874cd9af9861920b54ec6165e877f4ccc26aef602cc4f8c3'}
+ 'zachary-foundation-of-something-great:tr':{size:6184937,sha256:'ceda4fe14f18754a874cd9af9861920b54ec6165e877f4ccc26aef602cc4f8c3'},
+ 'zachary-night-everyone-belonged:en':{size:26211896,sha256:'b59c89989980ff05ecbbf4804e5f91979368c030e0910871c2e02f7bddb77b0c'},
+ 'zachary-night-everyone-belonged:es':{size:28262783,sha256:'78f58ed50c6152e7602198704a7be7618bc777b1aa30f46a725058a33abe787d'},
+ 'zachary-night-everyone-belonged:fr':{size:28259028,sha256:'6f4c210fa5bb5844ebc8f9536e32da3cebcfe33a4a3ca1c0cab474fc2f1f4449'},
+ 'zachary-night-everyone-belonged:de':{size:28265758,sha256:'745e5df235cad372802762fb51bd0570b7fd6a987e984e84fc744411658ec91b'},
+ 'zachary-night-everyone-belonged:pt-PT':{size:28261193,sha256:'dafa85452ae7aba8e2f1130242308c2703191124ad598e9927681ce2ee84be22'},
+ 'zachary-night-everyone-belonged:tr':{size:28262407,sha256:'918f557d7cf6f750ebc3668853c18aac08ef4e8e460fc8168156868ed1bc5163'}
 };
 const chunkSize=524288,maxBody=4*1048576;
 const pending=new Map();
