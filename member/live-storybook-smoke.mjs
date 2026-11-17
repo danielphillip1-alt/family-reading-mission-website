@@ -18,8 +18,57 @@ export async function testLiveStorybookRoutes(pool){
  if(!pool||!secret)return {skipped:'no database or gift-signing secret'};
  if(!await releaseAuditPending(pool))return {skipped:'already passed for this deployed commit'};
  const result=await runLiveStorybookRoutes(pool,secret);
+ if(result.passed){
+  result.barber=await testBarberGiftDownload(pool).catch(error=>({passed:false,error:error?.message||'unknown'}));
+  if(!result.barber.passed)result.passed=false;
+ }
  if(result.passed)await recordReleaseAudit(pool,result);
  return result;
+}
+// Barber gift recipient path, exactly as a customer uses it:
+// /barber/open -> choose language -> /barber/redeem?download=1 -> ZIP.
+// Also issues two short-lived QA links (2 h, recipient "QA Reader", no email,
+// no payment) so the deployed journey can be checked from a real phone browser.
+async function testBarberGiftDownload(pool){
+ const token=randomBytes(32).toString('hex');
+ await pool.query(`INSERT INTO aom_barber_gifts(session_id,purchased_at,buyer_email,buyer_language,gift_hash,sender_name,barber_shop_name,recipient1_name)
+  VALUES($1,now(),'qa@example.invalid','en',$2,'Authors On A Mission','QA','QA Reader')`,['qa_'+randomBytes(12).toString('hex'),sha(token)]);
+ const opened=await request('/barber/open?gift='+token,{headers:{'Accept-Language':'de-DE'}});
+ const html=await opened.text();
+ if(opened.status!==200||!html.includes('action="/barber/redeem"')||!html.includes('<option value="de" selected>')||html.includes('name="code"'))
+  fail('Barber gift page is not Language then Download');
+ const timings={};
+ for(const lang of ['de','en','pt-PT']){
+  const redeem=await request('/barber/redeem?gift='+token+'&download=1&language='+encodeURIComponent(lang));
+  if(redeem.status!==303)fail('Barber redeem failed '+lang);
+  const started=performance.now();
+  const zip=await request(redeem.headers.get('location'));
+  const firstByte=performance.now()-started;
+  const body=Buffer.from(await zip.arrayBuffer());
+  const total=performance.now()-started;
+  if(zip.status!==200||Number(zip.headers.get('content-length'))!==body.length||body.readUInt32LE(body.length-22)!==0x06054b50)fail('Barber ZIP incomplete '+lang);
+  let at=body.readUInt32LE(body.length-6);const entries=[];
+  for(let i=0;i<body.readUInt16LE(body.length-12);i++){
+   const n=body.readUInt16LE(at+28),size=body.readUInt32LE(at+24),offset=body.readUInt32LE(at+42);
+   const start=offset+30+body.readUInt16LE(offset+26)+body.readUInt16LE(offset+28);
+   entries.push({entry:body.subarray(at+46,at+46+n).toString(),size,sha256:sha(body.subarray(start,start+size))});
+   at+=46+n;
+  }
+  timings[lang]={books:entries.length,bytes:body.length,firstByteMs:Math.round(firstByte),totalMs:Math.round(total),source:zip.headers.get('x-aom-archive-source'),entries};
+ }
+ const de=timings.de.entries;
+ if(de.length!==5||!de.some(e=>e.entry.startsWith('02_Emir_Series/'))||!de.some(e=>e.size===14389311&&e.sha256==='ec7acc227dad7ab3d92893887e96e7d1bcaf80a468779bbbb71e7f017f63a52d'))
+  fail('German barber ZIP is missing Emir books or the original Book One');
+ const leak=await request('/barber/free-bundle.zip?language=de');
+ if(leak.status===200)fail('Public full-book ZIP still served');
+ const qaSource=sha('qa-gift:'+randomBytes(32).toString('hex')),qaToken=randomBytes(32).toString('hex'),qaBarber=randomBytes(32).toString('hex');
+ await pool.query("INSERT INTO aom_storybook_sources(source_hash,kind,expires_at,registered_at) VALUES($1,'qa',now()+interval '2 hours',now())",[qaSource]);
+ await pool.query("INSERT INTO aom_storybook_claims(token_hash,source_hash,slot,sender,recipient) VALUES($1,$2,1,'Authors On A Mission','QA Reader')",[sha(qaToken),qaSource]);
+ await pool.query(`INSERT INTO aom_barber_gifts(session_id,purchased_at,buyer_email,buyer_language,gift_hash,sender_name,barber_shop_name,recipient1_name)
+  VALUES($1,now(),'qa@example.invalid','en',$2,'Authors On A Mission','QA','QA Reader')`,['qa_'+randomBytes(12).toString('hex'),sha(qaBarber)]);
+ const base=process.env.APP_URL;
+ console.log('AOM two-hour QA gift links (no customer data):',JSON.stringify({storybook:new URL('/storybook/gift?gift='+qaToken,base).href,barber:new URL('/barber/open?gift='+qaBarber,base).href}));
+ return {passed:true,publicZipClosed:true,timings};
 }
 async function runLiveStorybookRoutes(pool,secret){
  const catalogResponse=await request('/api/storybook/catalog');
