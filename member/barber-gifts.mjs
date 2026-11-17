@@ -144,6 +144,26 @@ if(path==='/barber/free-bundle.zip'&&req.method==='GET'){
  res.writeHead(200,{'Content-Type':'application/zip','Content-Disposition':'attachment; filename="Authors-On-A-Mission-Free-Books-'+lang+'.zip"','Content-Length':zip.length,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(zip);return true;
 }
 
+// Standalone retail bundle: no gift links or barbershop personalization.
+const RETAIL_LINK='plink_1UcgSgRuZKBP2B3nsT0qp29N';
+const retailPaid=session=>session&&session.livemode===true&&session.mode==='payment'&&session.status==='complete'&&session.payment_status==='paid'&&session.payment_link===RETAIL_LINK&&session.currency==='usd'&&session.amount_total===4999;
+if(path==='/barber/bundle-checkout'&&req.method==='GET'){
+ const selected=langs.has(url.searchParams.get('language'))?url.searchParams.get('language'):'en';
+ const available=await titles(pool,new Date(),selected);
+ if(available.length<12){
+  send(res,503,page('Digital book bundle — $49.99 USD','<p><strong>One-time price: $49.99 USD.</strong> The complete 12-book collection is not yet ready in the selected language. Purchasing is paused so you will not be charged for unavailable books.</p><p>Available approved titles in '+safe(selected)+': '+available.length+' of 12. Please return when the collection is ready.</p><p><a href="https://www.theauthorsmission.de/">Back to Authors On A Mission</a></p>'));return true;
+ }
+ res.writeHead(303,{'Location':'https://buy.stripe.com/14A4gBdwU1DIanu4xzffy05','Cache-Control':'no-store'});res.end();return true;
+}
+if((path==='/barber/bundle-thanks'||path==='/barber/bundle-pdf')&&req.method==='GET'){
+ let session;
+ try{session=await stripe.checkout.sessions.retrieve(id||'');}catch(e){if(e?.type==='StripeInvalidRequestError'&&[400,404].includes(e?.statusCode)){send(res,403,page('Payment not verified','Please complete the purchase first.'));return true;}throw e;}
+ if(!retailPaid(session)){send(res,403,page('Payment not verified','A verified $49.99 USD retail bundle purchase is required.'));return true;}
+ const at=new Date(session.created*1000),lang=language(session);
+ if(path==='/barber/bundle-pdf'){await pdf(pool,res,slug,lang,at);return true;}
+ const books=await titles(pool,at,lang);
+ send(res,200,page('Your purchased digital book bundle','<p>Thank you for your one-time $49.99 USD purchase. Download your books in your chosen language:</p>'+list(books,'/barber/bundle-pdf?session_id='+encodeURIComponent(id)+'&slug=')+'<p>Keep this receipt page private to protect your downloads.</p>'));return true;
+}
 if(path==='/barber/checkout'&&req.method==='GET'){
   const sets=await Promise.all([...langs].map(l=>titles(pool,new Date(),l)));
   const same=hasFullBundle(sets);
