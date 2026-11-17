@@ -257,9 +257,35 @@ function inviteCard(token,name){
 
 export async function handleStorybook({req,res,url,pool,stripe}){
  const path=url.pathname,method=req.method;
- if(!path.startsWith('/storybook/')&&!path.startsWith('/api/admin/storybook/')&&path!=='/barber/checkout')return false;
+ if(!path.startsWith('/storybook/')&&!path.startsWith('/api/admin/storybook/')&&path!=='/barber/checkout'&&path!=='/api/storybook/catalog')return false;
  if(path==='/api/admin/storybook/upload'&&method==='GET'){
   send(res,200,storybookAdminPage(),'text/html; charset=utf-8');return true;
+ }
+ if(path==='/api/storybook/catalog'&&method==='GET'){
+  if(!pool){send(res,503,JSON.stringify({error:'catalog temporarily unavailable'}),'application/json');return true;}
+  try{
+   const data=await pool.query(`
+    SELECT f.slug,f.language,f.size,f.sha256,'private-storybook' AS source
+      FROM aom_storybook_files f
+      JOIN (SELECT slug,language,COUNT(*) AS count,SUM(octet_length(bytes)) AS bytes
+            FROM aom_storybook_pdf_parts GROUP BY slug,language) p
+        ON p.slug=f.slug AND p.language=f.language
+     WHERE f.approved_at IS NOT NULL AND p.bytes=f.size AND p.count=ceil(f.size::numeric/524288)
+    UNION ALL
+    SELECT r.slug,e.language,octet_length(b.pdf_content) AS size,e.sha256,'bundle' AS source
+      FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug
+      JOIN aom_book_files b ON b.storage_key=e.private_object_key AND b.sha256=e.sha256
+     WHERE r.status='published' AND r.published_at<=now() AND e.approved_at IS NOT NULL
+    UNION ALL
+    SELECT r.slug,e.language,octet_length(b.pdf_content) AS size,e.sha256,'release' AS source
+      FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id
+      JOIN aom_book_files b ON b.storage_key=e.private_object_key AND b.sha256=e.sha256
+     WHERE r.status='published' AND r.published_at<=now() AND e.approved_at IS NOT NULL
+    ORDER BY slug,language,source`);
+   const editions=[...new Map(data.rows.map(e=>[e.slug+':'+e.language,e])).values()];
+   send(res,200,JSON.stringify({editions,count:editions.length}),'application/json');
+  }catch(error){console.error('Storybook catalog query failed',error.code||error.name);send(res,503,JSON.stringify({error:'catalog temporarily unavailable'}),'application/json');}
+  return true;
  }
  if(!pool||!secret()){send(res,503,page('Storybook gifts are unavailable','<p>Please try again later.</p>'));return true;}
  try{
