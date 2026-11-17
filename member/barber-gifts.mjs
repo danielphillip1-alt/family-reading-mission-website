@@ -1,26 +1,7 @@
 import {createHash,createHmac,randomBytes} from 'node:crypto';
-import {deflateRawSync} from 'node:zlib';
 import {sendTransactionalMail,mailConfigured} from './mail.mjs';
 import {bundleTitle,isBundleBook,shelfPage} from './gift-shelf.mjs';
-
-function crc32(buf){let crc=0xffffffff;for(const byte of buf){crc^=byte;for(let i=0;i<8;i++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return (crc^0xffffffff)>>>0;}
-function zipBooks(entries){
- const locals=[],centrals=[];let offset=0;
- for(const {name,bytes} of entries){
-  const file=Buffer.from(name),raw=Buffer.from(bytes),packed=deflateRawSync(raw),crc=crc32(raw);
-  const local=Buffer.alloc(30);local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(20,4);local.writeUInt16LE(0,6);local.writeUInt16LE(8,8);local.writeUInt32LE(crc,14);local.writeUInt32LE(packed.length,18);local.writeUInt32LE(raw.length,22);local.writeUInt16LE(file.length,26);
-  locals.push(local,file,packed);
-  const central=Buffer.alloc(46);central.writeUInt32LE(0x02014b50,0);central.writeUInt16LE(20,4);central.writeUInt16LE(20,6);central.writeUInt16LE(0,8);central.writeUInt16LE(8,10);central.writeUInt32LE(crc,16);central.writeUInt32LE(packed.length,20);central.writeUInt32LE(raw.length,24);central.writeUInt16LE(file.length,28);central.writeUInt32LE(offset,42);
-  centrals.push(central,file);offset+=local.length+file.length+packed.length;
- }
- const centralBytes=centrals.reduce((n,b)=>n+b.length,0),end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(entries.length,8);end.writeUInt16LE(entries.length,10);end.writeUInt32LE(centralBytes,12);end.writeUInt32LE(offset,16);
- return Buffer.concat([...locals,...centrals,end]);
-}
-function freeBundlePage(lang){
- const labels={en:'DOWNLOAD ALL BOOKS',de:'ALLE BÜCHER HERUNTERLADEN','pt-PT':'DESCARREGAR TODOS OS LIVROS'};
- const title=labels[lang]||labels.en;
- return '<!doctype html><html lang="'+safe(lang)+'"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>'+title+'</title><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 20% 15%,#12b7e9,transparent 45%),radial-gradient(circle at 85% 75%,#fb6f9b,transparent 45%),linear-gradient(140deg,#0b2777,#6627a7);font-family:system-ui;color:white;text-align:center}main{padding:35px 25px;max-width:720px}h1{font-size:clamp(42px,9vw,82px);line-height:1.05;text-shadow:4px 5px #142153;margin:0 0 35px}.gift{font-size:90px;margin-bottom:15px}.button{display:inline-block;background:#ffdf38;color:#142354;border-radius:60px;padding:22px 32px;font-size:clamp(20px,4vw,31px);font-weight:1000;text-decoration:none;box-shadow:0 10px #ed7e28}.button:focus-visible{outline:4px solid white}</style><main><div class="gift" aria-hidden="true">🎁📚✨</div><h1>'+title+'</h1><a class="button" href="/barber/free-bundle.zip?language='+encodeURIComponent(lang)+'">'+title+'</a></main></html>';
-}
+import {approvedLanguageBooks,sendApprovedPdf,sendLanguageZip} from './storybook-gifts.mjs';
 
 const LINK='plink_1UcgIURuZKBP2B3nCAGISBfm';
 const LEGACY_LINK='plink_1UboGGRuZKBP2B3nzmcAPiQL';
@@ -40,10 +21,11 @@ async function titles(pool,at,lang){const q=await pool.query(`
  SELECT r.slug FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.status='published' AND r.published_at<=$1
  UNION SELECT r.slug FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.status='published' AND r.published_at<=$1
  ORDER BY slug`,[at,lang]);return q.rows.map(x=>x.slug);}
-async function pdf(pool,res,slug,lang,at,disposition='attachment'){if(!/^[a-z0-9-]{3,80}$/.test(slug||''))return send(res,400,'Invalid title','text/plain');const q=await pool.query(`
- SELECT f.pdf_content FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.slug=$1 AND r.status='published' AND r.published_at<=$3
- UNION ALL SELECT f.pdf_content FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.slug=$1 AND r.status='published' AND r.published_at<=$3 LIMIT 1`,[slug,lang,at]);if(!q.rowCount)return send(res,404,'This book is not included in your purchased collection.','text/plain');const b=q.rows[0].pdf_content;res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':disposition+'; filename="AOM-'+slug+'-'+lang+'.pdf"','Content-Length':b.length,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end(b);}
-const list=(slugs,base)=>slugs.length?'<ul>'+slugs.map(s=>'<li><a class="btn" href="'+base+encodeURIComponent(s)+'">'+safe(s.replaceAll('-',' '))+' (PDF)</a></li>').join('')+'</ul>':'<p>No approved files are currently available for this language. Please contact support with your payment receipt.</p>';
+async function approvedPdf(pool,res,slug,lang,inline=false){
+ if(!isBundleBook(slug)||!(await approvedLanguageBooks(pool,lang)).includes(slug))return send(res,404,'This book is not included in your collection.','text/plain');
+ await sendApprovedPdf(pool,res,slug,lang,inline);
+}
+const list=(slugs,base)=>slugs.length?'<ul>'+slugs.map(s=>'<li><a class="btn" href="'+base+encodeURIComponent(s)+'">'+safe(bundleTitle(s,'en'))+' (PDF)</a></li>').join('')+'</ul>':'<p>No approved files are currently available for this language. Please contact support with your payment receipt.</p>';
 
 const readerCopy={
  en:{save:'Be sure to download the book so you can read it again anytime.',download:'Download the book (PDF)',full:'Read full screen',more:'More books in your gift',missing:'This book is not yet available in your chosen language.'},
@@ -125,23 +107,10 @@ if(!pool){send(res,503,page('Service unavailable','Please contact support.'));re
 try{
 const path=url.pathname,id=url.searchParams.get('session_id'),gift=url.searchParams.get('gift'),access=url.searchParams.get('access'),slug=url.searchParams.get('slug');
 
-if(path==='/barber/free-books'&&req.method==='GET'){
- const lang=langs.has(url.searchParams.get('language'))?url.searchParams.get('language'):'en';
- send(res,200,freeBundlePage(lang));return true;
-}
-if(path==='/barber/free-bundle.zip'&&req.method==='GET'){
- const lang=langs.has(url.searchParams.get('language'))?url.searchParams.get('language'):'en';
- const available=await titles(pool,new Date(),lang);
- if(!available.length){send(res,503,page('Books being prepared','<p>There are no approved books ready for this language yet.</p>'));return true;}
- const entries=[];
- for(const slug of available){
-  const q=await pool.query(`SELECT f.pdf_content FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.slug=$1 AND r.status='published' AND r.published_at<=now()
-   UNION ALL SELECT f.pdf_content FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug AND e.language=$2 AND e.approved_at IS NOT NULL JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256 WHERE r.slug=$1 AND r.status='published' AND r.published_at<=now() LIMIT 1`,[slug,lang]);
-  if(q.rowCount)entries.push({name:slug+'-'+lang+'.pdf',bytes:q.rows[0].pdf_content});
- }
- if(!entries.length){send(res,503,page('Books being prepared','<p>Book files are not ready yet.</p>'));return true;}
- const zip=zipBooks(entries);
- res.writeHead(200,{'Content-Type':'application/zip','Content-Disposition':'attachment; filename="Authors-On-A-Mission-Free-Books-'+lang+'.zip"','Content-Length':zip.length,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(zip);return true;
+// Full books are never served without a private gift link or verified purchase.
+// The former public free-bundle ZIP now leads to the public book overview.
+if((path==='/barber/free-books'||path==='/barber/free-bundle.zip')&&req.method==='GET'){
+ res.writeHead(303,{'Location':'https://www.theauthorsmission.de/library.html','Cache-Control':'no-store'});res.end();return true;
 }
 
 // Standalone retail bundle: no gift links or barbershop personalization.
@@ -160,8 +129,8 @@ if((path==='/barber/bundle-thanks'||path==='/barber/bundle-pdf')&&req.method==='
  try{session=await stripe.checkout.sessions.retrieve(id||'');}catch(e){if(e?.type==='StripeInvalidRequestError'&&[400,404].includes(e?.statusCode)){send(res,403,page('Payment not verified','Please complete the purchase first.'));return true;}throw e;}
  if(!retailPaid(session)){send(res,403,page('Payment not verified','A verified $49.99 USD retail bundle purchase is required.'));return true;}
  const at=new Date(session.created*1000),lang=language(session);
- if(path==='/barber/bundle-pdf'){await pdf(pool,res,slug,lang,at);return true;}
- const books=await titles(pool,at,lang);
+ if(path==='/barber/bundle-pdf'){await approvedPdf(pool,res,slug,lang);return true;}
+ const books=await approvedLanguageBooks(pool,lang);
  send(res,200,page('Your purchased digital book bundle','<p>Thank you for your one-time $49.99 USD purchase. Download your books in your chosen language:</p>'+list(books,'/barber/bundle-pdf?session_id='+encodeURIComponent(id)+'&slug=')+'<p>Keep this receipt page private to protect your downloads.</p>'));return true;
 }
 if(path==='/barber/checkout'&&req.method==='GET'){
@@ -179,9 +148,9 @@ const giftUrl=new URL('/barber/open?gift='+g,process.env.APP_URL).href;
 const giftUrl2=new URL('/barber/open?gift='+g2,process.env.APP_URL).href;
 // Recipient emails wait for a completed personalization form and permission.
 try{if(email&&mailConfigured())await sendTransactionalMail({email,subject:'Your digital book bundle and personalized gift links',html:'<p>Thank you for supporting Authors On A Mission.</p><p>Your personal books: <a href="'+safe(new URL('/barber/thanks?session_id='+id,process.env.APP_URL).href)+'">Open your purchased book collection</a></p><p><strong>Personalize gifts:</strong> <a href="'+safe(new URL('/barber/setup?session_id='+id,process.env.APP_URL).href)+'">Enter sender, barbershop and recipient names</a></p><p>After you save the names, you will receive two private gift links to share.</p><p>Keep your personal receipt link private. This is a one-time purchase, not a subscription.</p>'},'bundle-buyer-two-gifts-'+id);}catch(e){console.error('Barber buyer email failed',e?.code||e?.name);}
-send(res,200,page('Thank you for your purchase!','<p>Your one-time purchase is verified. Your personal downloads:</p>'+list(await titles(pool,at,lang),'/barber/pdf?session_id='+encodeURIComponent(id)+'&slug=')+'<h2>Personalize your two gifts</h2><p><a class="btn" href="'+safe(new URL('/barber/setup?session_id='+id,process.env.APP_URL).href)+'">Enter names for the gift page</a></p><p>Save the names first, then send each recipient their personalized private gift link. Each gift can be redeemed once. Keep your payment receipt private.</p>'));return true;
+send(res,200,page('Thank you for your purchase!','<p>Your one-time purchase is verified. Your personal downloads:</p>'+list(await approvedLanguageBooks(pool,lang),'/barber/pdf?session_id='+encodeURIComponent(id)+'&slug=')+'<h2>Personalize your two gifts</h2><p><a class="btn" href="'+safe(new URL('/barber/setup?session_id='+id,process.env.APP_URL).href)+'">Enter names for the gift page</a></p><p>Save the names first, then send each recipient their personalized private gift link. Each gift can be redeemed once. Keep your payment receipt private.</p>'));return true;
 }
-if(path==='/barber/pdf'&&req.method==='GET'){const s=await verified(stripe,id);if(!s){send(res,403,'Payment not verified','text/plain');return true;}await pdf(pool,res,slug,language(s),new Date(s.created*1000));return true;}
+if(path==='/barber/pdf'&&req.method==='GET'){const s=await verified(stripe,id);if(!s){send(res,403,'Payment not verified','text/plain');return true;}await approvedPdf(pool,res,slug,language(s));return true;}
 
 if(path==='/barber/redeem'&&req.method==='GET'){
  if(!/^[a-f0-9]{64}$/.test(gift||'')){send(res,404,page('Invalid gift','Gift link not found.'));return true;}
@@ -191,32 +160,38 @@ if(path==='/barber/redeem'&&req.method==='GET'){
  const q=await pool.query(`UPDATE aom_barber_gifts SET
     claimed_at=CASE WHEN gift_hash=$1 THEN COALESCE(claimed_at,now()) ELSE claimed_at END,
     claimed2_at=CASE WHEN gift2_hash=$1 THEN COALESCE(claimed2_at,now()) ELSE claimed2_at END,
-    recipient_language=CASE WHEN gift_hash=$1 THEN COALESCE(recipient_language,$2) ELSE recipient_language END,
-    recipient2_language=CASE WHEN gift2_hash=$1 THEN COALESCE(recipient2_language,$2) ELSE recipient2_language END,
+    recipient_language=CASE WHEN gift_hash=$1 THEN $2 ELSE recipient_language END,
+    recipient2_language=CASE WHEN gift2_hash=$1 THEN $2 ELSE recipient2_language END,
     access_hash=CASE WHEN gift_hash=$1 THEN $3 ELSE access_hash END,
     access2_hash=CASE WHEN gift2_hash=$1 THEN $3 ELSE access2_hash END
     WHERE (gift_hash=$1 AND (claimed_at IS NULL OR access_hash=$3))
        OR (gift2_hash=$1 AND (claimed2_at IS NULL OR access2_hash=$3))
     RETURNING session_id`,[tokenHash,lang,accessHash]);
  if(!q.rowCount){send(res,409,page('Gift unavailable','Use the private book link from your gift email if you already claimed this gift.'));return true;}
- const dest=readerUrl('books',bearer);
+ const dest=url.searchParams.get('download')==='1'?readerUrl('download',bearer):readerUrl('books',bearer);
  res.writeHead(303,{'Location':dest,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();return true;
 }
-if((path==='/barber/books'||path==='/barber/reader'||path==='/barber/reader-pdf')&&req.method==='GET'){
+if((path==='/barber/books'||path==='/barber/reader'||path==='/barber/reader-pdf'||path==='/barber/download')&&req.method==='GET'){
  if(!/^[a-f0-9]{64}$/.test(access||'')){send(res,403,'Invalid gift access','text/plain');return true;}
  const q=await pool.query('SELECT CASE WHEN access_hash=$1 THEN recipient_language ELSE recipient2_language END AS recipient_language FROM aom_barber_gifts WHERE (access_hash=$1 AND claimed_at IS NOT NULL) OR (access2_hash=$1 AND claimed2_at IS NOT NULL)',[hash(access)]);
  if(!q.rowCount){send(res,403,'Gift access unavailable','text/plain');return true;}
  const lang=q.rows[0].recipient_language, at=new Date();
  if(!langs.has(lang)){send(res,403,'Gift language unavailable','text/plain');return true;}
- if(path==='/barber/reader-pdf'){
-  if(!isBundleBook(slug)){send(res,404,'This book is not included in your gift.','text/plain');return true;}
-  await pdf(pool,res,slug,lang,at,url.searchParams.get('inline')==='1'?'inline':'attachment');
+ if(path==='/barber/download'){
+  try{await sendLanguageZip(pool,res,lang);}
+  catch(e){console.error('Barber gift ZIP failed',e?.code||e?.name);if(!res.headersSent)send(res,500,'Download unavailable','text/plain');else res.destroy();}
   return true;
  }
- const available=(await titles(pool,at,lang)).filter(isBundleBook);
+ if(path==='/barber/reader-pdf'){
+  if(!isBundleBook(slug)){send(res,404,'This book is not included in your gift.','text/plain');return true;}
+  await approvedPdf(pool,res,slug,lang,url.searchParams.get('inline')==='1');
+  return true;
+ }
+ const available=await approvedLanguageBooks(pool,lang);
  if(path==='/barber/books'){
-  const otherEditions=(await Promise.all([...langs].filter(l=>l!==lang).map(l=>titles(pool,at,l)))).flat().filter(isBundleBook);
-  send(res,200,shelfPage({lang,available,otherEditions,link:(view,book)=>readerUrl(view,access,book)}));return true;
+  const zipLabel={en:'Download all books (ZIP)',de:'Alle Bücher herunterladen (ZIP)','pt-PT':'Descarregar todos os livros (ZIP)'}[lang];
+  const bulk=available.length?'<div style="background:#fff2cc;text-align:center;padding:14px"><a class="button" href="'+safe(readerUrl('download',access))+'">'+zipLabel+' ('+available.length+')</a></div>':'';
+  send(res,200,shelfPage({lang,available,otherEditions:[],order:available,link:(view,book)=>readerUrl(view,access,book)}).replace('<ul class="books">',()=>bulk+'<ul class="books">'));return true;
  }
  const book=slug||available[0];
  if(!available.includes(book)){
@@ -248,7 +223,7 @@ if(path==='/barber/gift-pdf'&&req.method==='GET'){
 if(!/^[a-f0-9]{64}$/.test(access||'')){send(res,403,'Invalid gift access','text/plain');return true;}
 const q=await pool.query('SELECT purchased_at,CASE WHEN access_hash=$1 THEN recipient_language ELSE recipient2_language END AS recipient_language FROM aom_barber_gifts WHERE (access_hash=$1 AND claimed_at IS NOT NULL) OR (access2_hash=$1 AND claimed2_at IS NOT NULL)',[hash(access)]);
 if(!q.rowCount){send(res,403,'Gift access unavailable','text/plain');return true;}
-const p=q.rows[0];await pdf(pool,res,slug,p.recipient_language,p.purchased_at);return true;
+const p=q.rows[0];await approvedPdf(pool,res,slug,p.recipient_language);return true;
 }
 return false;
 }catch(e){console.error('Barber redemption failed',e?.code||e?.name);send(res,503,page('Temporary error','Please retry using the original link.'));return true;}

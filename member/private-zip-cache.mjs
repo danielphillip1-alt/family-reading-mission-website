@@ -36,4 +36,13 @@ export async function privateZipFile(signature,expectedSize,writeArchive){
  finally{pending.delete(key);}
 }
 
+// Non-blocking lookup: returns the prepared archive path only when it is complete.
+export async function cachedZipFile(signature,expectedSize){
+ const key=createHash('sha256').update(signature).digest('hex')+'.zip';
+ if(pending.has(key))return null;
+ const filename=join(await directory,key);
+ const found=await stat(filename).catch(()=>null);
+ return found?.size===expectedSize?filename:null;
+}
+
 export const streamCachedZip=async(filename,response)=>pipeline(createReadStream(filename),response);

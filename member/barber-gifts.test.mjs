@@ -9,6 +9,7 @@ const session={id:sid,livemode:true,mode:'payment',status:'complete',payment_sta
  payment_link:'plink_1UboGGRuZKBP2B3nzmcAPiQL',currency:'eur',amount_total:2499,
  created:Math.floor(Date.now()/1000),customer_details:{email:'supporter@example.test'},
  custom_fields:[{key:'booklanguage',dropdown:{value:'de'}}]};
+const pdf=Buffer.from('%PDF-1.7 demo');
 function fixture(fullCatalog=false){
  let row=null;
  const pool={query:async(sql,p)=>{
@@ -27,9 +28,9 @@ function fixture(fullCatalog=false){
   if(sql.includes('UPDATE aom_barber_gifts SET')&&sql.includes('COALESCE(claimed_at')){
    const first=row?.gift_hash===p[0], second=row?.gift2_hash===p[0];
    if(first&&(!row.claimed_at||row.access_hash===p[2])){
-    row.claimed_at??=new Date();row.recipient_language??=p[1];row.access_hash=p[2];
+    row.claimed_at??=new Date();row.recipient_language=p[1];row.access_hash=p[2];
    }else if(second&&(!row.claimed2_at||row.access2_hash===p[2])){
-    row.claimed2_at??=new Date();row.recipient2_language??=p[1];row.access2_hash=p[2];
+    row.claimed2_at??=new Date();row.recipient2_language=p[1];row.access2_hash=p[2];
    }else return {rowCount:0,rows:[]};
    return {rowCount:1,rows:[{session_id:row.session_id}]};
   }
@@ -42,13 +43,20 @@ function fixture(fullCatalog=false){
   }
   if(sql.includes('CASE WHEN access_hash=$1 THEN recipient_language'))return row&&(row.access_hash===p[0]||row.access2_hash===p[0])?{rowCount:1,rows:[{purchased_at:row.purchased_at,recipient_language:row.access_hash===p[0]?row.recipient_language:row.recipient2_language}]}:{rowCount:0,rows:[]};
   if(sql.includes('SELECT f.pdf_content'))return {rowCount:1,rows:[{pdf_content:Buffer.from('%PDF-1.7 demo')}]};
+  // Shared approved inventory used by gifts, buyers and ZIPs.
+  if(sql.trimStart().startsWith('SELECT slug FROM aom_storybook_files'))return {rowCount:2,rows:[{slug:'zachary-my-unique-hat-2026-11'},{slug:'emir-boy-who-never-smiles'},{slug:'emir-meets-zachary'}]};
+  if(sql.includes('SELECT size,sha256 FROM aom_storybook_files'))return {rowCount:1,rows:[{size:pdf.length,sha256:'a'.repeat(64)}]};
+  if(sql.includes('FROM aom_storybook_pdf_parts'))return sql.includes('part >=$3')?{rowCount:1,rows:[{part:0,bytes:pdf}]}:{rowCount:1,rows:[{bytes:pdf}]};
   throw new Error('Unexpected database query: '+sql.slice(0,150));
  }};
  const stripe={checkout:{sessions:{retrieve:async(id)=>id===sid?session:null}}};
  return {stripe,pool};
 }
 async function request(f,path,method='GET',body=''){
- const res={status:0,body:null,headers:{},writeHead(status,h){this.status=status;this.headers=h||{}},end(v){this.body=v}};
+ const res={status:0,body:null,headers:{},chunks:[],headersSent:false,destroyed:false,
+  writeHead(status,h){this.status=status;this.headers=h||{};this.headersSent=true},
+  write(v){this.chunks.push(Buffer.from(v));return true},
+  end(v){if(v!==undefined&&typeof v!=='string')this.chunks.push(Buffer.from(v));this.body=typeof v==='string'?v:Buffer.concat(this.chunks).toString('latin1')}};
  const req={method,async *[Symbol.asyncIterator](){if(body)yield Buffer.from(body)}};
  const handled=await handleBarber({req,res,url:new URL('https://example.test'+path),stripe:f.stripe,pool:f.pool});
  return {handled,res};
@@ -56,7 +64,7 @@ async function request(f,path,method='GET',body=''){
 test('Unpaid orders cannot access purchased digital books',async()=>{
  const f=fixture();const x=await request(f,'/barber/thanks?session_id=cs_live_INVALID');assert.equal(x.res.status,403);
 });
-test('Two gift links open independent readers, retain the chosen language and allow PDF downloads',async()=>{
+test('Two gift links open independent readers in the chosen language and allow PDF downloads',async()=>{
  const f=fixture();const x=await request(f,'/barber/thanks?session_id='+sid);
  assert.equal(x.res.status,200);
  assert.match(x.res.body,/Your personal downloads/);
@@ -78,6 +86,9 @@ test('Two gift links open independent readers, retain the chosen language and al
   assert.match(download.res.headers['Content-Disposition'],/^attachment;/);
   const reopen=await request(f,'/barber/redeem?gift='+token+'&language=de');
   assert.equal(reopen.res.headers.Location,view.res.headers.Location);
+  const german=await request(f,reopen.res.headers.Location);
+  assert.match(german.res.body,/Dein Büchergeschenk/,'a recipient can switch to the language they actually want');
+  assert.doesNotMatch(german.res.body,/emir-meets-zachary/,'editorially locked title never appears');
   const twice=await request(f,'/barber/redeem','POST','gift='+token+'&email=x%40example.test&language=en');assert.equal(twice.res.status,409);
  }
 });
@@ -116,4 +127,29 @@ test('Checkout redirects to existing one-time Stripe payment link only with four
  const r=await request(f,'/barber/checkout');
  assert.equal(r.res.status,303);
  assert.equal(r.res.headers.Location,'https://buy.stripe.com/14AeVfeAY2HM8fm7JLffy04');
+});
+
+test('Language then Download: a gift link goes straight to the numbered ZIP for the chosen language',async()=>{
+ const f=fixture();await request(f,'/barber/thanks?session_id='+sid);
+ const token=createHmac('sha256',process.env.AOM_BARBER_GIFT_SECRET).update('gift:'+sid).digest('hex');
+ const go=await request(f,'/barber/redeem?gift='+token+'&language=de&download=1');
+ assert.equal(go.res.status,303);
+ assert.match(go.res.headers.Location,/^\/barber\/download\?access=[a-f0-9]{64}$/);
+ const zip=await request(f,go.res.headers.Location);
+ assert.equal(zip.res.status,200);
+ assert.equal(zip.res.headers['Content-Type'],'application/zip');
+ assert.match(zip.res.headers['Content-Disposition'],/^attachment; filename="Authors_On_A_Mission_de_2_Books\.zip"$/);
+ const body=Buffer.concat(zip.res.chunks);
+ assert.equal(body.length,zip.res.headers['Content-Length']);
+ const text=body.toString('latin1');
+ assert.ok(text.indexOf('01_Zachary_Series/01_Zachary_Book_1_My_Unique_Hat_de.pdf')<text.indexOf('02_Emir_Series/01_Emir_Book_1_The_Boy_Who_Never_Smiles_de.pdf'));
+ assert.ok(!text.includes('Meets_Zachary'));
+});
+test('No public ZIP of full books exists without a gift link',async()=>{
+ const f=fixture();
+ for(const path of ['/barber/free-bundle.zip?language=de','/barber/free-books?language=en']){
+  const r=await request(f,path);
+  assert.equal(r.res.status,303);
+  assert.equal(r.res.headers.Location,'https://www.theauthorsmission.de/library.html');
+ }
 });

@@ -1,4 +1,3 @@
-import {once} from 'node:events';
 // Stream a ZIP of exactly the caller-authorized PDFs; no public file access.
 // ZIP store method with data descriptors keeps memory bounded to one PDF chunk.
 const bookNames={
@@ -35,9 +34,17 @@ function checksum(state,bytes){
  for(const b of bytes)crc=table[(crc^b)&255]^(crc>>>8);
  return crc>>>0;
 }
+// Wait for the client to accept more bytes, but stop at once if the phone
+// disconnects so an abandoned download never holds a database reader open.
 async function push(res,bytes){
  if(res.destroyed)throw Error('Download was closed');
- if(!res.write(bytes))await once(res,'drain');
+ if(res.write(bytes))return;
+ await new Promise((resolve,reject)=>{
+  const finish=error=>{res.off('drain',drained);res.off('close',closed);error?reject(error):resolve();};
+  const drained=()=>finish();
+  const closed=()=>finish(Error('Download was closed'));
+  res.on('drain',drained);res.on('close',closed);
+ });
 }
 export async function streamBookZip({res,language,books,readChunks}){
  if(!Array.isArray(books)||!books.length||books.length>200)throw Error('Invalid book list');

@@ -6,8 +6,8 @@ import {sendTransactionalMail,mailConfigured} from './mail.mjs';
 import {giftArt} from './gift-shelf-art.mjs';
 import {storybookAdminPage} from './storybook-admin.mjs';
 import {shelfPage,isBundleBook,bundleTitle} from './gift-shelf.mjs';
-import {streamBookZip,bookZipByteLength,bookZipOrder} from './zip-library.mjs';
-import {privateZipFile,streamCachedZip} from './private-zip-cache.mjs';
+import {streamBookZip,bookZipByteLength,bookZipOrder,bookZipName} from './zip-library.mjs';
+import {privateZipFile,streamCachedZip,cachedZipFile} from './private-zip-cache.mjs';
 
 const SITE='https://theauthorsmission.de';
 const languages={en:'English','pt-PT':'Português',de:'Deutsch',tr:'Türkçe',fr:'Français',es:'Español'};
@@ -29,13 +29,87 @@ const giftLink=token=>urlFor('/storybook/gift',{gift:token});
 const bundleSlug='aom-storybook-collection';
 const displayName=(name,fallback)=>{const label=String(name||'').trim();return label&&!label.includes('@')?label.slice(0,40):fallback;};
 const chunkSize=524288;
-const template=()=>readFile(new URL('./storybook-gift.html',import.meta.url),'utf8');
+// The approved illustrated gift template is kept byte-for-byte; its small
+// script and button styles are patched here when served.
+const giftScript=`<script>
+const art=document.querySelector('.art');
+document.querySelector('.gift-tail').style.backgroundImage='url("'+art.src+'")';
+const lang=document.querySelector('#language');
+const form=document.querySelector('.aom-two-step');
+const status=document.querySelector('#downloadStatus');
+const button=document.querySelector('#open');
+const pinLabels={en:['Your language','Download code','Open My Gift'],de:['Deine Sprache','Downloadcode','Mein Geschenk öffnen'],'pt-PT':['O teu idioma','Código de download','Abrir o meu presente'],tr:['Dilin','İndirme kodu','Hediyemi aç']};
+let giftCopy={};try{giftCopy=JSON.parse(form?.dataset.copy||'{}');}catch{}
+const relabel=()=>{
+ if(!lang)return;
+ document.documentElement.lang=lang.value;
+ const two=giftCopy[lang.value]||giftCopy.en,pin=pinLabels[lang.value]||pinLabels.en;
+ const label=document.querySelector('#languageLabel'),code=document.querySelector('#codeLabel');
+ if(form&&two){if(label)label.textContent=two[0];if(button)button.textContent=two[1];if(status)status.textContent='';return;}
+ if(label)label.textContent=pin[0];if(code)code.textContent=pin[1];if(button)button.textContent=pin[2];
+};
+lang?.addEventListener('change',relabel);
+form?.addEventListener('submit',()=>{
+ const two=giftCopy[lang.value]||giftCopy.en;
+ if(status&&two)status.textContent=two[2];
+ if(button){button.setAttribute('aria-busy','true');setTimeout(()=>{button.disabled=true;},0);setTimeout(()=>{button.disabled=false;button.removeAttribute('aria-busy');},6000);}
+});
+addEventListener('pageshow',()=>{if(button){button.disabled=false;button.removeAttribute('aria-busy');}});
+</script></body></html>`;
+const giftStyle='.download-status{grid-column:1/-1;margin:4px 0 0;font:700 16px/1.4 system-ui,sans-serif;color:#063a2b;min-height:1.4em}.open[disabled]{opacity:.75;cursor:progress}.code-panel select{min-height:48px;font-size:18px}.open{min-height:52px}</style></head>';
+let templateCache=null;
+const template=async()=>{
+ if(templateCache)return templateCache;
+ const raw=await readFile(new URL('./storybook-gift.html',import.meta.url),'utf8');
+ const at=raw.lastIndexOf('<script>');
+ if(at<0||!raw.includes('</style></head>'))throw Error('Gift template layout changed');
+ return templateCache=raw.slice(0,at).replace('</style></head>',giftStyle)+giftScript;
+};
+// Language -> Download page on the approved gift artwork. `action` and
+// `hidden` choose which private route receives the language.
+export async function giftDownloadPage({pool,req,requested,recipient,sender,action,hidden,codes=Object.keys(languages)}){
+ const counts=await languageBookCounts(pool,codes);
+ const offered=codes.filter(code=>counts[code]>0);
+ const lang=preferredLanguage(requested,req.headers['accept-language'],offered);
+ const text=twoStepCopy[lang]||twoStepCopy.en;
+ const choices=offered.map(code=>'<option value="'+code+'"'+(code===lang?' selected':'')+'>'+escape(languages[code])+' ('+counts[code]+')</option>').join('');
+ const inputs=Object.entries(hidden).map(([k,v])=>'<input type="hidden" name="'+escape(k)+'" value="'+escape(v)+'">').join('');
+ const formHtml=offered.length?'<form method="get" action="'+escape(action)+'" class="aom-two-step" data-copy="'+escape(JSON.stringify(twoStepCopy))+'">'+inputs
+  +'<label id="languageLabel" for="language">'+escape(text[0])+'</label><select id="language" name="language" required>'+choices+'</select>'
+  +'<button class="open" id="open" type="submit">'+escape(text[1])+'</button>'
+  +'<p id="downloadStatus" class="download-status" role="status" aria-live="polite"></p></form>'
+  :'<p role="status">'+escape(text[3])+'</p>';
+ return (await template()).replace('<html lang="en">','<html lang="'+lang+'">')
+  .replace('%%RECIPIENT%%',()=>escape(recipient))
+  .replace('%%SENDER%%',()=>escape(sender))
+  .replace('%%NOTICE%%','')
+  .replace('%%FORM%%',()=>formHtml);
+}
 const copy={
  en:['Your gift has already been opened.','Download all 12 books (PDF)','Finish and visit the website','Download your books before you finish. You have one hour to save them.','Open My Gift','Your language','Download code'],
  de:['Dein Geschenk wurde bereits geöffnet.','Alle 12 Bücher herunterladen (PDF)','Fertig und zur Website','Lade deine Bücher herunter, bevor du fertig bist. Du hast eine Stunde Zeit.','Mein Geschenk öffnen','Deine Sprache','Downloadcode'],
  'pt-PT':['O teu presente já foi aberto.','Descarregar os 12 livros (PDF)','Terminar e visitar o site','Descarrega os teus livros antes de terminares. Tens uma hora para os guardar.','Abrir o meu presente','O teu idioma','Código de download'],
  tr:['Hediyen zaten açıldı.','12 kitabın tümünü indir (PDF)','Bitir ve siteyi ziyaret et','Bitirmeden önce kitaplarını indir. Kaydetmek için bir saatin var.','Hediyemi aç','Dilin','İndirme kodu']
 };
+
+// Gift page copy: [language label, button, starting message, nothing available]
+const twoStepCopy={
+ en:['Language','Download','Your books are downloading. On iPhone, find the ZIP in Files › Downloads.','Your books are being prepared. Please try again later.'],
+ de:['Sprache','Herunterladen','Deine Bücher werden heruntergeladen. Auf dem iPhone findest du die ZIP-Datei unter Dateien › Downloads.','Deine Bücher werden vorbereitet. Bitte versuche es später erneut.'],
+ 'pt-PT':['Idioma','Descarregar','Os teus livros estão a ser descarregados. No iPhone, encontra o ZIP em Ficheiros › Transferências.','Os teus livros estão a ser preparados. Tenta novamente mais tarde.'],
+ tr:['Dil','İndir','Kitapların indiriliyor. iPhone’da ZIP dosyasını Dosyalar › İndirilenler bölümünde bulabilirsin.','Kitapların hazırlanıyor. Lütfen daha sonra tekrar dene.'],
+ es:['Idioma','Descargar','Tus libros se están descargando. En iPhone, encuentra el ZIP en Archivos › Descargas.','Tus libros se están preparando. Inténtalo más tarde.'],
+ fr:['Langue','Télécharger','Tes livres sont en cours de téléchargement. Sur iPhone, retrouve le ZIP dans Fichiers › Téléchargements.','Tes livres sont en préparation. Réessaie plus tard.']
+};
+function preferredLanguage(requested,acceptLanguage,offered){
+ if(offered.includes(requested))return requested;
+ for(const part of String(acceptLanguage||'').split(',')){
+  const tag=part.split(';')[0].trim().toLowerCase();
+  const match=offered.find(code=>code.toLowerCase()===tag)||offered.find(code=>code.split('-')[0]===tag.split('-')[0]);
+  if(match)return match;
+ }
+ return offered.includes('en')?'en':offered[0]||'en';
+}
 
 export const storybookSchema=`
  CREATE TABLE IF NOT EXISTS aom_storybook_sources(
@@ -127,7 +201,7 @@ async function deliverFile(pool,res,slug,lang,inline){
  const file=await fileFor(pool,slug,lang);
  if(!file){send(res,404,'Book unavailable','text/plain');return;}
  res.writeHead(200,{...headers,'Content-Type':'application/pdf','Content-Length':file.size,
-  'Content-Disposition':(inline?'inline':'attachment')+'; filename="'+slug+'-'+lang+'.pdf"'});
+  'Content-Disposition':(inline?'inline':'attachment')+'; filename="'+bookZipName(slug,lang).split('/').pop()+'"'});
  for(let offset=1;offset<=file.size&&!res.destroyed;offset+=chunkSize){
   const row=file.storage_key
    ?(await pool.query('SELECT substring(pdf_content FROM $3 FOR 524288) AS bytes FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',[file.storage_key,file.sha256,offset])).rows[0]
@@ -138,71 +212,13 @@ async function deliverFile(pool,res,slug,lang,inline){
  res.end();
 }
 
-async function prepareLanguageArchive(pool,slugs,lang){
- const books=[];
- for(const slug of [...slugs].sort((a,b)=>bookZipOrder(a)-bookZipOrder(b))){
-  const source=await fileFor(pool,slug,lang);
-  if(!source)throw Error('A requested edition is unavailable');
-  books.push({...source,slug,size:Number(source.size)});
- }
- if(!books.length)throw Error('No approved books in requested language');
- const size=bookZipByteLength(books,lang);
- const signature=JSON.stringify([lang,books.map(b=>[b.slug,b.size,b.sha256])]);
- const filename=await privateZipFile(signature,size,async res=>{
-  const readChunks=async function*(book){
-   const batchParts=16;
-   if(book.storage_key){
-    for(let offset=1;offset<=book.size;offset+=chunkSize*batchParts){
-     const row=(await pool.query(
-      'SELECT substring(pdf_content FROM $3 FOR $4) AS bytes FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',
-      [book.storage_key,book.sha256,offset,chunkSize*batchParts])).rows[0];
-     if(!row?.bytes?.length)throw Error('Missing archive PDF bytes');
-     for(let pos=0;pos<row.bytes.length;pos+=chunkSize)yield row.bytes.subarray(pos,pos+chunkSize);
-    }
-   }else{
-    const count=Math.ceil(book.size/chunkSize);
-    for(let part=0;part<count;part+=batchParts){
-     const result=await pool.query(
-      'SELECT part,bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 AND part >=$3 AND part<$4 ORDER BY part',
-      [book.slug,lang,part,Math.min(count,part+batchParts)]);
-     if(result.rows.length!==Math.min(batchParts,count-part))throw Error('Archive edition is incomplete');
-     for(let i=0;i<result.rows.length;i++){
-      const row=result.rows[i];
-      if(row.part!==part+i||!row.bytes?.length)throw Error('Archive PDF chunks are incomplete');
-      yield row.bytes;
-     }
-    }
-   }
-  };
-  await streamBookZip({res,language:lang,books,readChunks});
- });
- return {filename,size,count:books.length};
-}
-export async function warmGiftArchives(pool){
- const status=[];
- for(const lang of Object.keys(languages)){
-  const slugs=await availableLanguageBooks(pool,lang);
-  if(slugs.length){
-   const archive=await prepareLanguageArchive(pool,slugs,lang);
-   status.push({language:lang,count:archive.count,size:archive.size});
-  }
- }
- return status;
-}
-async function deliverAllBooks(pool,res,slugs,lang){
- const archive=await prepareLanguageArchive(pool,slugs,lang);
- const filename='AOM_'+lang.replace(/[^a-z0-9-]/gi,'_')+'_'+archive.count+'_Books_'+new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'.zip';
- res.writeHead(200,{...headers,'Content-Type':'application/zip',
-  'Content-Length':archive.size,
-  'Content-Disposition':'attachment; filename="'+filename+'"',
-  'X-AOM-Book-Count':String(archive.count)});
- await streamCachedZip(archive.filename,res);
-}
-
-// The gifted library is a directory of individually approved, fully stored PDFs.
-// A 12-book merged bundle remains a separate checkout/download readiness gate.
-async function availableLanguageBooks(pool,lang){
- const results=[];
+// One inventory for every gift, reader and ZIP route: approved PDFs only,
+// numbered in reading order, editorially locked titles excluded by fileFor().
+const editionCache=new Map();
+const editionTtl=60000;
+async function languageEditions(pool,lang){
+ const cached=editionCache.get(lang);
+ if(cached&&Date.now()-cached.at<editionTtl)return cached.books;
  const candidates=[...new Set((await pool.query(
   `SELECT slug FROM aom_storybook_files WHERE language=$1 AND approved_at IS NOT NULL AND slug<>$2
    UNION SELECT r.slug FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id
@@ -210,9 +226,106 @@ async function availableLanguageBooks(pool,lang){
    UNION SELECT r.slug FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug
     WHERE e.language=$1 AND e.approved_at IS NOT NULL AND r.status='published' AND r.published_at<=now()`,
   [lang,bundleSlug])).rows.map(x=>x.slug))].filter(slug=>isBundleBook(slug)&&slug!=='emir-meets-zachary');
- for(const slug of candidates)if(await fileFor(pool,slug,lang))results.push(slug);
- const preferred=['zachary-my-unique-hat-2026-11','zachary-school-that-believed-in-him','zachary-school-that-made-room','emir-boy-who-never-smiles','emir-barbershop-boys-and-salon-girls','emir-meets-zachary'];
- return results.sort((a,b)=>{const ia=preferred.indexOf(a),ib=preferred.indexOf(b);return (ia<0?999:ia)-(ib<0?999:ib)||a.localeCompare(b)});
+ const books=[];
+ for(const slug of candidates){
+  const source=await fileFor(pool,slug,lang);
+  if(source)books.push({...source,slug,size:Number(source.size)});
+ }
+ books.sort((a,b)=>bookZipOrder(a.slug)-bookZipOrder(b.slug)||a.slug.localeCompare(b.slug));
+ editionCache.set(lang,{at:Date.now(),books});
+ return books;
+}
+async function availableLanguageBooks(pool,lang){
+ return (await languageEditions(pool,lang)).map(book=>book.slug);
+}
+export const approvedLanguageBooks=availableLanguageBooks;
+export async function languageBookCounts(pool,codes=Object.keys(languages)){
+ const counts={};
+ for(const lang of codes)counts[lang]=(await languageEditions(pool,lang)).length;
+ return counts;
+}
+
+async function* bookChunks(pool,book,lang){
+ const batchParts=16;
+ if(book.storage_key){
+  for(let offset=1;offset<=book.size;offset+=chunkSize*batchParts){
+   const row=(await pool.query(
+    'SELECT substring(pdf_content FROM $3 FOR $4) AS bytes FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',
+    [book.storage_key,book.sha256,offset,chunkSize*batchParts])).rows[0];
+   if(!row?.bytes?.length)throw Error('Missing archive PDF bytes');
+   for(let pos=0;pos<row.bytes.length;pos+=chunkSize)yield row.bytes.subarray(pos,pos+chunkSize);
+  }
+ }else{
+  const count=Math.ceil(book.size/chunkSize);
+  for(let part=0;part<count;part+=batchParts){
+   const result=await pool.query(
+    'SELECT part,bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 AND part >=$3 AND part<$4 ORDER BY part',
+    [book.slug,lang,part,Math.min(count,part+batchParts)]);
+   if(result.rows.length!==Math.min(batchParts,count-part))throw Error('Archive edition is incomplete');
+   for(let i=0;i<result.rows.length;i++){
+    const row=result.rows[i];
+    if(row.part!==part+i||!row.bytes?.length)throw Error('Archive PDF chunks are incomplete');
+    yield row.bytes;
+   }
+  }
+ }
+}
+function archivePlan(books,lang){
+ const size=bookZipByteLength(books,lang);
+ const signature=JSON.stringify([lang,books.map(b=>[b.slug,b.size,b.sha256])]);
+ return {size,signature};
+}
+function buildArchive(pool,books,lang,plan){
+ return privateZipFile(plan.signature,plan.size,res=>streamBookZip({res,language:lang,books,readChunks:book=>bookChunks(pool,book,lang)}));
+}
+// Boot-time ZIP preparation; heavy release audits wait for this first.
+let warmDone=Promise.resolve();
+export const giftArchivesWarmed=()=>warmDone;
+export function warmGiftArchives(pool){
+ const started=Date.now();
+ const job=(async()=>{
+  await purgeQaGifts(pool).catch(error=>console.error('QA gift cleanup failed',error?.code||error?.name));
+  const rows=await prepareAllArchives(pool);
+  console.log('Private ZIP preparation ms='+(Date.now()-started));
+  return rows;
+ })();
+ warmDone=job.catch(()=>null);
+ return job;
+}
+async function prepareAllArchives(pool){
+ const status=[];
+ for(const lang of Object.keys(languages)){
+  const books=await languageEditions(pool,lang);
+  if(!books.length)continue;
+  const plan=archivePlan(books,lang);
+  await buildArchive(pool,books,lang,plan);
+  status.push({language:lang,count:books.length,size:plan.size});
+ }
+ return status;
+}
+// Headers go out immediately with the exact Content-Length. A prepared private
+// ZIP streams from disk; if the instance just woke and the cache is still being
+// built, the same byte-identical ZIP streams directly from the database instead.
+export async function sendLanguageZip(pool,res,lang){
+ const books=await languageEditions(pool,lang);
+ if(!books.length){send(res,404,'No approved books are available in this language yet.','text/plain; charset=utf-8');return;}
+ const plan=archivePlan(books,lang);
+ const ready=await cachedZipFile(plan.signature,plan.size);
+ const filename='Authors_On_A_Mission_'+lang.replace(/[^a-z0-9-]/gi,'_')+'_'+books.length+'_Books.zip';
+ res.writeHead(200,{...headers,'Content-Type':'application/zip',
+  'Content-Length':plan.size,
+  'Content-Disposition':'attachment; filename="'+filename+'"',
+  'X-AOM-Book-Count':String(books.length),
+  'X-AOM-Archive-Source':ready?'prepared':'direct'});
+ if(ready){await streamCachedZip(ready,res);return;}
+ buildArchive(pool,books,lang,plan).catch(error=>console.error('Private ZIP cache build failed',error?.message||error?.name));
+ await streamBookZip({res,language:lang,books,readChunks:book=>bookChunks(pool,book,lang)});
+}
+export async function sendApprovedPdf(pool,res,slug,lang,inline=false){
+ await deliverFile(pool,res,slug,lang,inline);
+}
+async function deliverAllBooks(pool,res,slugs,lang){
+ await sendLanguageZip(pool,res,lang);
 }
 
 async function bundleReady(pool,lang){
@@ -269,13 +382,13 @@ async function verified(stripe,id){
  return s?.mode==='payment'&&s.livemode&&s.status==='complete'&&s.payment_status==='paid'&&s.amount_total===2000&&s.currency==='eur'&&s.metadata?.aom_product==='storybook-12'?s:null;
 }
 async function sendInvite(row,token){
- const code=codeFor(token), link=new URL(giftLink(token),process.env.APP_URL).href;
+ const link=new URL(giftLink(token),process.env.APP_URL).href;
  const sender=displayName(row.sender,'Someone special');
- const message=sender+' sent you a storybook gift! Open '+link+' and enter download code '+code+'.';
+ const message=sender+' sent you a storybook gift! Open '+link+' , choose your language and tap Download.';
  const key='storybook-'+hash(token);
  if(row.channel==='email'){
   if(!mailConfigured())throw Error('Email delivery unavailable');
-  await sendTransactionalMail({email:row.destination,subject:'Your storybook gift',html:'<p>'+escape(sender)+' sent you a storybook gift!</p><p><a href="'+escape(link)+'">Open your gift page</a></p><p>Your download code is <strong>'+code+'</strong>.</p>'},key);
+  await sendTransactionalMail({email:row.destination,subject:'Your storybook gift',html:'<p>'+escape(sender)+' sent you a storybook gift!</p><p><a href="'+escape(link)+'">Open your gift</a>, choose your language and tap <strong>Download</strong>.</p>'},key);
  }else if(row.channel==='sms'){
   const {AOM_SMS_WEBHOOK_URL:endpoint,AOM_SMS_WEBHOOK_TOKEN:credential}=process.env;
   if(!endpoint||!credential)throw Error('Text delivery unavailable');
@@ -312,12 +425,18 @@ async function purchase(pool,session,requireDelivery=false){
  }
  return token;
 }
+export async function purgeQaGifts(pool){
+ if(!pool)return;
+ await pool.query("DELETE FROM aom_storybook_claims WHERE source_hash IN (SELECT source_hash FROM aom_storybook_sources WHERE kind='qa' AND expires_at<now())");
+ await pool.query("DELETE FROM aom_storybook_sources WHERE kind='qa' AND expires_at<now()");
+ await pool.query("DELETE FROM aom_barber_gifts WHERE session_id LIKE 'qa\\_%' AND purchased_at<now()-interval '2 hours'");
+}
 export async function deliverStorybookPurchase(pool,session){
  if(!pool||!secret()||!session?.livemode||session.mode!=='payment'||session.status!=='complete'||session.payment_status!=='paid'||session.amount_total!==2000||session.currency!=='eur'||session.metadata?.aom_product!=='storybook-12')return;
  await purchase(pool,session,true);
 }
 function inviteCard(token,name){
- return '<fieldset><legend>'+escape(name)+'</legend><a class="btn" href="'+escape(giftLink(token))+'">Open gift page</a><p>Download code: <strong>'+codeFor(token)+'</strong></p></fieldset>';
+ return '<fieldset><legend>'+escape(name)+'</legend><a class="btn" href="'+escape(giftLink(token))+'">Open gift page</a></fieldset>';
 }
 
 export async function handleStorybook({req,res,url,pool,stripe}){
@@ -393,6 +512,32 @@ export async function handleStorybook({req,res,url,pool,stripe}){
     send(res,200,JSON.stringify({files:result.rows}),'application/json');return true;
    }
    if(path==='/api/admin/storybook/pdf'){await uploadPdf(req,res,url,pool);return true;}
+   // Short-lived QA gifts exercise the exact customer routes from outside.
+   // They expire after two hours, are deleted on the next QA request or boot,
+   // never send email, and are never attached to a customer or payment.
+   if(path==='/api/admin/storybook/qa-gift'){
+    await purgeQaGifts(pool);
+    const qaSource=hash('qa-gift:'+randomBytes(32).toString('hex')),qaToken=randomBytes(32).toString('hex');
+    await pool.query("INSERT INTO aom_storybook_sources(source_hash,kind,expires_at,registered_at) VALUES($1,'qa',now()+interval '2 hours',now())",[qaSource]);
+    await pool.query("INSERT INTO aom_storybook_claims(token_hash,source_hash,slot,sender,recipient) VALUES($1,$2,1,'Authors On A Mission','QA Reader')",[hash(qaToken),qaSource]);
+    const barberToken=randomBytes(32).toString('hex');
+    await pool.query(`INSERT INTO aom_barber_gifts(session_id,purchased_at,buyer_email,buyer_language,gift_hash,sender_name,barber_shop_name,recipient1_name)
+     VALUES($1,now(),'qa@example.invalid','en',$2,'Authors On A Mission','QA','QA Reader')`,['qa_'+randomBytes(12).toString('hex'),hash(barberToken)]);
+    send(res,201,JSON.stringify({storybookGiftUrl:new URL(giftLink(qaToken),process.env.APP_URL).href,
+     barberGiftUrl:new URL('/barber/open?gift='+barberToken,process.env.APP_URL).href,expiresInMinutes:120}),'application/json');return true;
+   }
+   if(path==='/api/admin/storybook/diagnostics'){
+    const files=(await pool.query(`SELECT slug,language,size,sha256,approved_at IS NOT NULL AS approved,'storybook' AS source FROM aom_storybook_files
+     UNION ALL SELECT r.slug,e.language,octet_length(f.pdf_content),e.sha256,e.approved_at IS NOT NULL,'release:'||r.status FROM aom_releases r JOIN aom_release_editions e ON e.release_id=r.id LEFT JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256
+     UNION ALL SELECT r.slug,e.language,octet_length(f.pdf_content),e.sha256,e.approved_at IS NOT NULL,'bundle:'||r.status FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON e.slug=r.slug LEFT JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256
+     ORDER BY 1,2,6`)).rows;
+    const gifts=(await pool.query(`SELECT s.kind,count(c.*)::int AS claims,count(c.used_at)::int AS opened FROM aom_storybook_sources s LEFT JOIN aom_storybook_claims c USING(source_hash) GROUP BY s.kind`)).rows;
+    const barber=(await pool.query(`SELECT count(*)::int AS purchases,count(claimed_at)::int+count(claimed2_at)::int AS claimed,
+     count(*) FILTER (WHERE session_id NOT LIKE 'qa\\_%')::int AS real_purchases FROM aom_barber_gifts`)).rows[0];
+    const download={};
+    for(const lang of Object.keys(languages))download[lang]=(await languageEditions(pool,lang)).map(b=>({slug:b.slug,entry:bookZipName(b.slug,lang),size:b.size,sha256:b.sha256,source:b.storage_key?'release-or-bundle':'storybook'}));
+    send(res,200,JSON.stringify({files,gifts,barber,download,commit:process.env.RENDER_GIT_COMMIT||null}),'application/json');return true;
+   }
    const data=await form(req);
    if(path==='/api/admin/storybook/issue'){
     const key=randomBytes(32).toString('hex');
@@ -453,10 +598,10 @@ export async function handleStorybook({req,res,url,pool,stripe}){
     const token=tokenFor(source,row.slot);let sent=Boolean(row.delivery_at);
     if(!sent)try{await sendInvite(row,token);await pool.query('UPDATE aom_storybook_claims SET delivery_at=now() WHERE token_hash=$1',[hash(token)]);sent=true;}
     catch(error){console.error('Storybook invitation delivery failed',error.name);}
-    result+=inviteCard(token,displayName(row.recipient,'Friend'))+(sent?'<p>Invitation sent.</p>':'<p>Automatic delivery needs a retry. You can share the private link and code yourself now.</p>');
+    result+=inviteCard(token,displayName(row.recipient,'Friend'))+(sent?'<p>Invitation sent.</p>':'<p>Automatic delivery needs a retry. You can share the private link yourself now.</p>');
     if(!sent&&row.channel==='sms'){
      const link=new URL(giftLink(token),process.env.APP_URL).href;
-     result+='<p><a class="btn" href="'+escape('sms:'+row.destination+'?body='+encodeURIComponent('Open your storybook gift: '+link+' Download code: '+codeFor(token)))+'">Open text message</a></p>';
+     result+='<p><a class="btn" href="'+escape('sms:'+row.destination+'?body='+encodeURIComponent('Open your storybook gift: '+link))+'">Open text message</a></p>';
     }
    }
    send(res,200,page('Your storybook gifts',result));return true;
@@ -467,33 +612,24 @@ export async function handleStorybook({req,res,url,pool,stripe}){
   const key=hash(gift);
   const row=(await pool.query('SELECT * FROM aom_storybook_claims WHERE token_hash=$1',[key])).rows[0];
   if(!row){send(res,404,page('Gift link unavailable','<p>Open the private link from your gift message.</p>'));return true;}
-  // A free gift's high-entropy private link authorizes the download:
-  // recipients select only a language and press Download.
+  // A gift's high-entropy private link authorizes the download: recipients
+  // choose a language and press Download. No PIN, sign-in or purchase prompt.
+  // Sent free and paid gifts stay valid; short-lived QA gifts honour expiry.
   const giftSource=(await pool.query(
    'SELECT kind,expires_at FROM aom_storybook_sources WHERE source_hash=$1',[row.source_hash])).rows[0];
-  const freeGift=giftSource?.kind==='free'&&(!giftSource.expires_at||new Date(giftSource.expires_at)>new Date());
-  if(freeGift&&method==='GET'&&path==='/storybook/download-all'){
+  const directGift=['free','paid'].includes(giftSource?.kind)||
+   (giftSource?.kind==='qa'&&giftSource.expires_at&&new Date(giftSource.expires_at)>new Date());
+  if(directGift&&method==='GET'&&path==='/storybook/download-all'){
    const selected=url.searchParams.get('language');
    if(!Object.hasOwn(languages,selected)){send(res,400,'Choose a valid language','text/plain');return true;}
-   const slugs=await availableLanguageBooks(pool,selected);
-   if(!slugs.length){send(res,404,'No books in this language','text/plain');return true;}
-   try{await deliverAllBooks(pool,res,slugs,selected);}
-   catch(error){console.error('Free gift ZIP failed',error?.code||error?.name,error?.message||'');if(!res.headersSent)send(res,500,'Download unavailable','text/plain');else res.destroy();}
+   try{await sendLanguageZip(pool,res,selected);}
+   catch(error){console.error('Gift ZIP failed',error?.code||error?.name,error?.message||'');if(!res.headersSent)send(res,500,'Download unavailable','text/plain');else res.destroy();}
    return true;
   }
-  if(freeGift&&method==='GET'&&path==='/storybook/gift'){
-   const selected=url.searchParams.get('language');
-   const lang=Object.hasOwn(languages,selected)?selected:'en';
-   const formHtml='<form method="get" action="/storybook/download-all" class="aom-two-step">'
-    +'<input type="hidden" name="gift" value="'+gift+'">'
-    +'<label for="language">Language</label><select id="language" name="language" required>'+options(lang)+'</select>'
-    +'<button class="open" type="submit">Download</button></form>';
-   const html=(await template()).replace('<html lang="en">','<html lang="'+lang+'">')
-    .replace('%%RECIPIENT%%',()=>escape(displayName(row.recipient,'Friend')))
-    .replace('%%SENDER%%',()=>escape(displayName(row.sender,'Someone special')))
-    .replace('%%NOTICE%%','')
-    .replace('%%FORM%%',()=>formHtml);
-   send(res,200,html);return true;
+  if(directGift&&method==='GET'&&path==='/storybook/gift'){
+   send(res,200,await giftDownloadPage({pool,req,requested:url.searchParams.get('language'),
+    recipient:displayName(row.recipient,'Friend'),sender:displayName(row.sender,'Someone special'),
+    action:'/storybook/download-all',hidden:{gift}}));return true;
   }
   if(path==='/storybook/gift'&&method==='GET'){
    const wantedBook=url.searchParams.get('book');

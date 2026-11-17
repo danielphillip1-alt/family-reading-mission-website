@@ -20,13 +20,15 @@ const pool={query:async(sql,p)=>{
   Object.assign(row,{sender_name:p[1],barber_shop_name:p[2],recipient1_name:p[3],recipient2_name:p[4]});
   return {rowCount:1,rows:[{session_id:sid}]};
  }
+ if(sql.trimStart().startsWith('SELECT slug FROM aom_storybook_files'))return {rows:p[0]==='pt-PT'?[]:[{slug:'zachary-my-unique-hat-2026-11'},{slug:'emir-boy-who-never-smiles'}]};
+ if(sql.includes('SELECT size,sha256 FROM aom_storybook_files'))return {rows:[{size:20,sha256:'a'.repeat(64)}]};
  throw Error('Unexpected SQL '+sql.slice(0,100));
 }};
 const stripe={checkout:{sessions:{retrieve:async id=>id===sid?session:null}}};
 return {pool,stripe,row};
 }
 async function call(f,path,method='GET',body=''){
- const req={method,async *[Symbol.asyncIterator](){if(body)yield Buffer.from(body)}};
+ const req={method,headers:{'accept-language':'de-DE'},async *[Symbol.asyncIterator](){if(body)yield Buffer.from(body)}};
  const res={status:null,headers:{},body:'',writeHead(s,h){this.status=s;this.headers=h||{}},end(b){this.body=b||''}};
  const handled=await handleGiftPersonalization({req,res,url:new URL('https://books.example.test'+path),...f});
  return {handled,res};
@@ -45,19 +47,20 @@ test('two personalized recipient links carry independent names with the same sen
  assert.equal(post.res.status,200);
  assert.match(post.res.body,/Jamie/);assert.match(post.res.body,/Casey/);
  const a=await call(f,'/barber/open?gift='+token(1)),b=await call(f,'/barber/open?gift='+token(2));
- assert.equal(a.res.status,303);assert.equal(b.res.status,303);
- const dest1=new URL(a.res.headers.Location),dest2=new URL(b.res.headers.Location);
- assert.equal(dest1.origin,'https://theauthorsmission.de');
- assert.equal(dest1.searchParams.get('to'),'Jamie');
- assert.equal(dest2.searchParams.get('to'),'Casey');
- assert.equal(dest1.searchParams.get('from'),'Daniel');
- assert.equal(dest2.searchParams.get('shop'),'Rosewood Barbershop');
- assert.notEqual(dest1.searchParams.get('gift'),dest2.searchParams.get('gift'));
+ assert.equal(a.res.status,200);assert.equal(b.res.status,200);
+ assert.match(a.res.body,/Jamie, <span class="sender">Daniel \(Rosewood Barbershop\)<\/span>/);
+ assert.match(b.res.body,/Casey, <span class="sender">Daniel/);
+ // Exactly Language -> Download: one form to /barber/redeem with download=1, no PIN or price.
+ assert.match(a.res.body,/<form method="get" action="\/barber\/redeem"[^>]*><input type="hidden" name="gift" value="[a-f0-9]{64}"><input type="hidden" name="download" value="1">/);
+ assert.match(a.res.body,/<option value="de" selected>Deutsch \(2\)<\/option>/);
+ assert.doesNotMatch(a.res.body,/value="pt-PT"|value="fr"|name="code"|buy\.stripe/);
+ assert.match(a.res.body,/>Herunterladen<\/button>/);
+ assert.ok(a.res.body.includes(token(1))&&b.res.body.includes(token(2)));
  f.row.claimed_at=new Date();
  const already=await call(f,'/barber/open?gift='+token(1));
  assert.equal(already.res.status,409);
  const second=await call(f,'/barber/open?gift='+token(2));
- assert.equal(second.res.status,303);
+ assert.equal(second.res.status,200);
 });
 test('invalid tokens cannot load personalized landing page',async()=>{
  const f=fixture(), bad=await call(f,'/barber/open?gift='+'0'.repeat(64));
@@ -67,9 +70,7 @@ test('buyer names are rendered as escaped text, not injected HTML',async()=>{
  const f=fixture();f.row.sender_name='<script>alert(1)</script>';
  f.row.recipient1_name='Jamie';f.row.barber_shop_name='Smith & Sons';
  const q=await call(f,'/barber/open?gift='+token(1));
- assert.equal(q.res.status,303);
- const dest=new URL(q.res.headers.Location);
- assert.equal(dest.searchParams.get('from'),'<script>alert(1)</script>');
- assert.equal(dest.searchParams.get('shop'),'Smith & Sons');
- // The gift page uses textContent, never innerHTML, for URL-derived names.
+ assert.equal(q.res.status,200);
+ assert.doesNotMatch(q.res.body,/<script>alert/);
+ assert.match(q.res.body,/Smith &amp; Sons/);
 });

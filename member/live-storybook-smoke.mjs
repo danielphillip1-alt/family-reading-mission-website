@@ -1,5 +1,6 @@
 import {createHash,createHmac,randomBytes} from 'node:crypto';
 import {bookZipName} from './zip-library.mjs';
+import {releaseAuditPending,recordReleaseAudit} from './audit-approved-editions.mjs';
 
 // Authorized, transaction-free ephemeral audit users. No checkout, mail,
 // external recipient, or permanent customer access is created.
@@ -15,6 +16,12 @@ const tokenCode=(token,secret)=>{
 export async function testLiveStorybookRoutes(pool){
  const secret=process.env.AOM_BARBER_GIFT_SECRET||process.env.STRIPE_WEBHOOK_SECRET;
  if(!pool||!secret)return {skipped:'no database or gift-signing secret'};
+ if(!await releaseAuditPending(pool))return {skipped:'already passed for this deployed commit'};
+ const result=await runLiveStorybookRoutes(pool,secret);
+ if(result.passed)await recordReleaseAudit(pool,result);
+ return result;
+}
+async function runLiveStorybookRoutes(pool,secret){
  const catalogResponse=await request('/api/storybook/catalog');
  if(catalogResponse.status!==200)fail('Catalog returned '+catalogResponse.status);
  const catalog=await catalogResponse.json();

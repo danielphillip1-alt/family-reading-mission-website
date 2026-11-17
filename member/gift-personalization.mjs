@@ -1,5 +1,6 @@
 import {createHash,createHmac} from 'node:crypto';
 import {directGiftAccess,sendCheckoutGiftInvitations} from './barber-gifts.mjs';
+import {giftDownloadPage} from './storybook-gifts.mjs';
 const SITE='https://theauthorsmission.de';
 const PAYMENT_LINK='plink_1UboGGRuZKBP2B3nzmcAPiQL';
 const hash=s=>createHash('sha256').update(s).digest('hex');
@@ -24,12 +25,13 @@ export async function handleGiftPersonalization({req,res,url,stripe,pool}){
       if(!result.rowCount){send(res,404,page('Gift link unavailable','<p>This gift link was not found.</p>'));return true;}
       const row=result.rows[0],first=row.gift_hash===hash(token);
       if((first?row.claimed_at:row.claimed2_at)&&(first?row.access_hash:row.access2_hash)!==hash(directGiftAccess(token))){send(res,409,page('Gift already claimed','<p>This gift has already been redeemed. Please use your existing private book access link.</p>'));return true;}
-      const dest=new URL('/gift.html',SITE);
-      dest.searchParams.set('gift',token);
-      dest.searchParams.set('to',(first?row.recipient1_name:row.recipient2_name)||'Friend');
-      dest.searchParams.set('from',row.sender_name||'Someone special');
-      if(row.barber_shop_name)dest.searchParams.set('shop',row.barber_shop_name);
-      res.writeHead(303,{Location:dest.href,...header});res.end();return true;
+      // Language -> Download on the approved gift artwork. The private link is
+      // the access token; /barber/redeem records the language and sends the ZIP.
+      const sender=clean(row.sender_name)||'Someone special',shop=clean(row.barber_shop_name);
+      const html=await giftDownloadPage({pool,req,requested:url.searchParams.get('language'),
+        recipient:clean(first?row.recipient1_name:row.recipient2_name)||'Friend',sender:shop?sender+' ('+shop+')':sender,
+        action:'/barber/redeem',hidden:{gift:token,download:'1'},codes:['en','de','pt-PT']});
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8',...header});res.end(html);return true;
     }
     if(path==='/barber/setup'){
       const id=req.method==='GET'?url.searchParams.get('session_id'):null;

@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {giftArchivesWarmed} from './storybook-gifts.mjs';
 
 // Internal audit only. Never logs or serves book content or authentication tokens.
 const hash=()=>createHash('sha256');
@@ -26,8 +27,23 @@ async function verifyStoredBook(pool,row){
  const bytes=stored.rows[0].pdf_content;
  return {ok:head(bytes)&&tail(bytes)&&hash().update(bytes).digest('hex')===row.sha256,size:bytes.length};
 }
+// The full byte audit and live download QA read every PDF several times. On the
+// free instance that competed with the first customer download after each
+// wake-up, so both run once per deployed commit, after ZIPs are prepared.
+export async function releaseAuditPending(pool){
+ const commit=process.env.RENDER_GIT_COMMIT||'';
+ if(!commit)return true;
+ await pool.query('CREATE TABLE IF NOT EXISTS aom_release_audits(commit text PRIMARY KEY, passed_at timestamptz NOT NULL DEFAULT now(), summary jsonb)');
+ return !(await pool.query('SELECT 1 FROM aom_release_audits WHERE commit=$1',[commit])).rowCount;
+}
+export async function recordReleaseAudit(pool,summary){
+ const commit=process.env.RENDER_GIT_COMMIT||'';
+ if(commit)await pool.query('INSERT INTO aom_release_audits(commit,summary) VALUES($1,$2) ON CONFLICT DO NOTHING',[commit,JSON.stringify(summary)]);
+}
 export async function auditApprovedBookEditions(pool){
  if(!pool)return {skipped:'database not configured'};
+ await giftArchivesWarmed();
+ if(!await releaseAuditPending(pool))return {skipped:'already passed for this deployed commit',commit:(process.env.RENDER_GIT_COMMIT||'').slice(0,7)};
  const output=[];
  const staged=await pool.query('SELECT slug,language,size,sha256 FROM aom_storybook_files WHERE approved_at IS NOT NULL ORDER BY slug,language');
  for(const row of staged.rows){
