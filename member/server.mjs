@@ -676,6 +676,21 @@ startupMigrations.then(async()=>{
   console.log('German Emir approved book import:',JSON.stringify(germanEmirImport));
   const bundleImport=await importBundleBooks(pool);
   if(bundleImport.imported) console.log('Private bundle book editions imported:',bundleImport.count);
+  const editionSummary=await pool.query(`
+   SELECT slug,language,'storybook' AS source FROM aom_storybook_files
+    WHERE approved_at IS NOT NULL
+   UNION ALL
+   SELECT r.slug,e.language,'bundle' AS source
+    FROM aom_bundle_releases r JOIN aom_bundle_release_editions e ON r.slug=e.slug
+    JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256
+    WHERE r.status='published' AND e.approved_at IS NOT NULL
+   UNION ALL
+   SELECT r.slug,e.language,'release' AS source
+    FROM aom_releases r JOIN aom_release_editions e ON r.id=e.release_id
+    JOIN aom_book_files f ON f.storage_key=e.private_object_key AND f.sha256=e.sha256
+    WHERE r.status='published' AND e.approved_at IS NOT NULL
+   ORDER BY slug,language,source`);
+  console.log('AOM approved book edition inventory:',JSON.stringify(editionSummary.rows));
   const thirdBook=await importBookThree(pool);
   console.log('Zachary Book Three protected import:',JSON.stringify(thirdBook));
   const result=await importApprovedBookOne(pool);
