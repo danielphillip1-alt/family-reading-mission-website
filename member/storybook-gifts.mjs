@@ -379,21 +379,24 @@ export async function sendFreeBook(pool,req,res,slug,lang,download){
  if(status===206)head['Content-Range']='bytes '+start+'-'+end+'/'+size;
  res.writeHead(status,head);
  if(req.method==='HEAD'){res.end();return;}
- let pos=start;
+ // Read one 512 KB piece ahead so the database and the network overlap.
+ const piece=pos=>{
+  if(book.storage_key)return pool.query('SELECT substring(pdf_content FROM $3 FOR $4) AS bytes FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',
+   [book.storage_key,book.sha256,pos+1,Math.min(chunkSize,end-pos+1)]).then(r=>r.rows[0]?.bytes);
+  const part=Math.floor(pos/chunkSize);
+  return pool.query('SELECT bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 AND part=$3',[slug,lang,part])
+   .then(r=>r.rows[0]?.bytes?.subarray(pos-part*chunkSize,Math.min(r.rows[0].bytes.length,end-part*chunkSize+1)));
+ };
+ let pos=start,pending=piece(pos);
  while(pos<=end&&!res.destroyed){
-  let bytes;
-  if(book.storage_key){
-   bytes=(await pool.query('SELECT substring(pdf_content FROM $3 FOR $4) AS bytes FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',
-    [book.storage_key,book.sha256,pos+1,Math.min(chunkSize,end-pos+1)])).rows[0]?.bytes;
-  }else{
-   const part=Math.floor(pos/chunkSize);
-   const row=(await pool.query('SELECT bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 AND part=$3',[slug,lang,part])).rows[0];
-   bytes=row?.bytes?.subarray(pos-part*chunkSize,Math.min(row.bytes.length,end-part*chunkSize+1));
-  }
+  const bytes=await pending;
   if(!bytes?.length){res.destroy();return;}
-  pos+=bytes.length;
+  const after=pos+bytes.length;
+  pending=after<=end?piece(after):null;
+  pos=after;
   if(!res.write(bytes)&&!res.destroyed)await once(res,'drain',{signal:AbortSignal.timeout(15000)});
  }
+ pending?.catch(()=>{});
  res.end();
 }
 export async function sendApprovedPdf(pool,res,slug,lang,inline=false){

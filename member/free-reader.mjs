@@ -48,9 +48,9 @@ footer button:disabled{opacity:.3;cursor:default}#count{font-size:18px;font-weig
 @media (min-width:700px){header a{font-size:17px}.t b{font-size:19px}}
 </style></head><body>
 <header><a id="back" href="${esc(back)}">← ${esc(w.back)}</a><div class="t"><b>${esc(book.title)}</b><small>${esc(book.series)} · ${esc(w.book)} ${book.number}</small></div><a id="dl" href="${esc(pdf)}&amp;download=1">⬇ <span class="lbl">${esc(w.download)}</span></a></header>
-<main id="stage"><canvas id="page" role="img" aria-label="${esc(book.title)}"></canvas></main>
+<main id="stage"><img id="cover" src="/storybook/cover?${esc(q)}" alt="" style="max-width:100%;max-height:100%;border-radius:6px;box-shadow:0 8px 28px #0008"><canvas id="page" role="img" aria-label="${esc(book.title)}" style="display:none"></canvas></main>
 <footer><button id="prev" type="button" aria-label="${esc(w.prev)}">‹</button><span id="count" aria-live="polite"></span><button id="next" type="button" aria-label="${esc(w.next)}">›</button></footer>
-<div id="status">${esc(w.opening)}</div>
+<div id="status" style="top:auto;bottom:calc(var(--bottom,74px) + 12px);inset-inline:0;font-size:16px;pointer-events:none"><span style="background:#0d4536e6;padding:8px 16px;border-radius:999px">${esc(w.opening)}</span></div>
 <script src="${PDFJS}/pdf.min.js"></script>
 <script>
 (()=>{'use strict';
@@ -63,7 +63,7 @@ if(innerWidth<380)document.querySelector('#dl .lbl').remove();
 function layout(){document.documentElement.style.setProperty('--top',document.querySelector('header').offsetHeight+'px');document.documentElement.style.setProperty('--bottom',document.querySelector('footer').offsetHeight+'px');}
 layout();
 let doc=null,num=1,busy=false,queued=null,task=null;
-function fail(){status.replaceChildren();const p=document.createElement('p');p.textContent=W.failed;const a=document.createElement('a');a.href=URL_+'&download=1';a.textContent='⬇ '+W.download;status.append(p,a);status.style.display='flex';}
+function fail(){status.removeAttribute('style');const cov=document.getElementById('cover');if(cov)cov.remove();status.replaceChildren();const p=document.createElement('p');p.textContent=W.failed;const a=document.createElement('a');a.href=URL_+'&download=1';a.textContent='⬇ '+W.download;status.append(p,a);status.style.display='flex';}
 async function show(n){
  if(!doc)return;n=Math.max(1,Math.min(doc.numPages,n));
  if(busy){queued=n;return;}busy=true;num=n;
@@ -75,7 +75,7 @@ async function show(n){
   await page.render({canvasContext:off.getContext('2d'),viewport:vp}).promise;
   canvas.width=off.width;canvas.height=off.height;canvas.getContext('2d').drawImage(off,0,0);
   canvas.style.width=Math.floor(base.width*fit)+'px';canvas.style.height=Math.floor(base.height*fit)+'px';
-  status.style.display='none';
+  status.style.display='none';const cov=document.getElementById('cover');if(cov)cov.remove();canvas.style.display='block';
   count.textContent=W.page+' '+n+' / '+doc.numPages;prev.disabled=n<=1;next.disabled=n>=doc.numPages;
   try{localStorage.setItem(KEY,String(n));}catch(e){}
   if(n<doc.numPages)doc.getPage(n+1).catch(()=>{});
