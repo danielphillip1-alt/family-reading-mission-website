@@ -59,6 +59,7 @@ footer button:disabled{opacity:.3;cursor:default}#count{font-size:18px;font-weig
 (()=>{'use strict';
 const W=${JSON.stringify(w)},URL_=${JSON.stringify(pdf)},KEY='aom_page_'+${JSON.stringify(book.slug+':'+book.lang)},SLUG=${JSON.stringify(book.slug)},LANG=${JSON.stringify(book.lang)};
 const MODERN=(()=>{try{if(/[?&]legacy=1/.test(location.search)||typeof [].at!=='function'||typeof structuredClone!=='function')return false;new Function('class A{#p(){return 1}}');return true;}catch(e){return false;}})();
+const STREAM_DEFAULT=false;
 const BUILD=MODERN?${JSON.stringify(PDFJS_MODERN)}:${JSON.stringify(PDFJS_LEGACY)};
 const canvas=document.getElementById('page'),stage=document.getElementById('stage'),status=document.getElementById('status');
 const prev=document.getElementById('prev'),next=document.getElementById('next'),count=document.getElementById('count');
@@ -111,7 +112,8 @@ lib.onload=()=>{
  if(!window.pdfjsLib){fail('library','pdfjsLib missing');return;}
  try{
   pdfjsLib.GlobalWorkerOptions.workerSrc=BUILD+'/pdf.worker.min.js';
-  task=pdfjsLib.getDocument({url:URL_,rangeChunkSize:2097152,disableAutoFetch:false,disableStream:false,isEvalSupported:false});
+  const STREAM=/[?&]mode=stream/.test(location.search)?true:/[?&]mode=ranges/.test(location.search)?false:STREAM_DEFAULT;
+  task=pdfjsLib.getDocument(STREAM?{url:URL_,disableRange:true,disableStream:false,isEvalSupported:false}:{url:URL_,rangeChunkSize:2097152,disableAutoFetch:false,disableStream:false,isEvalSupported:false});
   task.promise.then(d=>{doc=d;let start=1;try{start=Number(localStorage.getItem(KEY))||1;}catch(e){}if(start>=d.numPages)start=1;show(start);}).catch(e=>fail('open',e));
  }catch(e){fail('init',e);}
 };
