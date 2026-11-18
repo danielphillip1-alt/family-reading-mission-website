@@ -75,27 +75,41 @@ let failed=false,first=false;
 function report(stage,msg){try{navigator.sendBeacon&&navigator.sendBeacon('/barber/reader-error',JSON.stringify({slug:SLUG,language:LANG,stage:stage,message:String(msg||'').slice(0,300),build:BUILD,ua:navigator.userAgent.slice(0,250)}));}catch(e){}}
 function fail(stage,err){
  if(failed||first)return;failed=true;report(stage,err&&(err.message||err.name||err));
- status.removeAttribute('style');while(status.firstChild)status.removeChild(status.firstChild);
+ const gentle=stage==='slow';status.removeAttribute('style');while(status.firstChild)status.removeChild(status.firstChild);
  const p=document.createElement('p');p.textContent=W.failed;
  const o=document.createElement('a');o.href=URL_;o.textContent='📖 '+W.open;
  const a=document.createElement('a');a.href=INAPP?URL_:URL_+'&download=1';a.textContent='⬇ '+W.download;a.style.background='#fff7e3';
- status.append(p,o,a);status.style.display='flex';status.style.background='rgba(10,52,40,.82)';
+ status.append(p,o,a);status.style.display='flex';
+ if(gentle){failed=false;status.style.cssText='display:flex;top:auto;bottom:calc(var(--bottom,74px) + 8px);inset-inline:0;flex-direction:row;flex-wrap:wrap;gap:8px;padding:10px;font-size:15px;background:rgba(10,52,40,.92)';p.style.margin='0';}
+ else status.style.background='rgba(10,52,40,.82)';
+}
+const ready=new Map();let sizeKey='';
+async function draw(n){
+ const page=await doc.getPage(n);const base=page.getViewport({scale:1});
+ const box=stage.getBoundingClientRect();const fit=Math.min((box.width-16)/base.width,(box.height-16)/base.height);
+ const ratio=Math.min(window.devicePixelRatio||1,2.5);const vp=page.getViewport({scale:fit*ratio});
+ const off=document.createElement('canvas');off.width=Math.floor(vp.width);off.height=Math.floor(vp.height);
+ await page.render({canvasContext:off.getContext('2d'),viewport:vp}).promise;
+ return {off:off,w:Math.floor(base.width*fit),h:Math.floor(base.height*fit)};
+}
+function prepare(n){
+ if(!doc||n<1||n>doc.numPages||ready.has(n))return;
+ ready.set(n,draw(n).catch(()=>{ready.delete(n);return null;}));
+ for(const k of [...ready.keys()])if(Math.abs(k-n)>2)ready.delete(k);
 }
 async function show(n){
  if(!doc)return;n=Math.max(1,Math.min(doc.numPages,n));
  if(busy){queued=n;return;}busy=true;num=n;
  try{
-  const page=await doc.getPage(n);const base=page.getViewport({scale:1});
-  const box=stage.getBoundingClientRect();const fit=Math.min((box.width-16)/base.width,(box.height-16)/base.height);
-  const ratio=Math.min(window.devicePixelRatio||1,2.5);const vp=page.getViewport({scale:fit*ratio});
-  const off=document.createElement('canvas');off.width=Math.floor(vp.width);off.height=Math.floor(vp.height);
-  await page.render({canvasContext:off.getContext('2d'),viewport:vp}).promise;
+  const key=Math.round(stage.clientWidth)+'x'+Math.round(stage.clientHeight);if(key!==sizeKey){ready.clear();sizeKey=key;}
+  prepare(n);let r=await ready.get(n);if(!r){ready.delete(n);r=await draw(n);}
+  const off=r.off;
   canvas.width=off.width;canvas.height=off.height;canvas.getContext('2d').drawImage(off,0,0);
-  canvas.style.width=Math.floor(base.width*fit)+'px';canvas.style.height=Math.floor(base.height*fit)+'px';
+  canvas.style.width=r.w+'px';canvas.style.height=r.h+'px';
   first=true;status.style.display='none';const cov=document.getElementById('cover');if(cov)cov.remove();canvas.style.display='block';
   count.textContent=W.page+' '+n+' / '+doc.numPages;prev.disabled=n<=1;next.disabled=n>=doc.numPages;
   try{localStorage.setItem(KEY,String(n));}catch(e){}
-  if(n<doc.numPages)doc.getPage(n+1).catch(()=>{});
+  setTimeout(()=>{prepare(n+1);prepare(n-1);},50);
  }catch(e){fail('render',e);}
  busy=false;if(queued!==null){const q=queued;queued=null;show(q);}
 }
@@ -108,7 +122,7 @@ stage.addEventListener('touchend',e=>{if(multi||(window.visualViewport&&visualVi
  if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.3)step(dx<0?1:-1);
  else if(Math.abs(dx)<10&&Math.abs(dy)<10){const r=stage.getBoundingClientRect();if(t.clientX>r.left+r.width*.66)step(1);else if(t.clientX<r.left+r.width*.34)step(-1);}},{passive:true});
 let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{layout();show(num);},150);});
-setTimeout(()=>{if(!first)fail('slow','no page after 25 s');},25000);
+setTimeout(()=>{if(!first)fail('slow','no page after 40 s');},40000);
 const lib=document.createElement('script');lib.src=BUILD+'/pdf.min.js';
 lib.onerror=()=>fail('library','script failed to load');
 lib.onload=()=>{
@@ -116,7 +130,7 @@ lib.onload=()=>{
  try{
   pdfjsLib.GlobalWorkerOptions.workerSrc=BUILD+'/pdf.worker.min.js';
   const STREAM=/[?&]mode=stream/.test(location.search)?true:/[?&]mode=ranges/.test(location.search)?false:STREAM_DEFAULT;
-  task=pdfjsLib.getDocument(STREAM?{url:URL_,disableRange:true,disableStream:false,isEvalSupported:false}:{url:URL_,rangeChunkSize:2097152,disableAutoFetch:false,disableStream:false,isEvalSupported:false});
+  task=pdfjsLib.getDocument(STREAM?{url:URL_,disableRange:true,disableStream:false,isEvalSupported:false}:{url:URL_,rangeChunkSize:1048576,disableAutoFetch:true,disableStream:true,isEvalSupported:false});
   task.promise.then(d=>{doc=d;let start=1;try{start=Number(localStorage.getItem(KEY))||1;}catch(e){}if(start>=d.numPages)start=1;target=start;show(start);}).catch(e=>fail('open',e));
  }catch(e){fail('init',e);}
 };
