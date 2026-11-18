@@ -35,6 +35,8 @@ footer{max-width:1122px;margin:auto;text-align:center;background:#01402e;color:#
 <div class="lang-overlay" role="group" aria-label="Choose your language"></div>
 <div class="hint" id="hint" role="status" aria-live="polite"></div></main>
 <section class="lang-panel" aria-label="Choose your language"><h2 id="panelTitle">Choose Your Language</h2><div class="grid" role="group" aria-labelledby="panelTitle"></div><button class="open-big" id="openBig" type="button">🎁 Open Your Gift</button><p class="status" id="panelStatus" role="status" aria-live="polite"></p></section>
+<section id="aom-shelf" aria-label="Read the books"></section>
+<script src="https://authors-on-a-mission-members.onrender.com/barber/shelf.js" defer></script>
 <footer><a href="/impressum.html">Impressum</a> · <a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a></footer>
 <script>
 (()=>{'use strict';
@@ -86,6 +88,8 @@ function choose(code){
  document.getElementById('panelTitle').textContent=copy[code].title;
  openBig.textContent='🎁 '+copy[code].open;open.setAttribute('aria-label',copy[code].open);
  say('');drawNames();
+ const shelf=document.getElementById('aom-shelf');if(shelf)shelf.dataset.language=code;
+ document.dispatchEvent(new CustomEvent('aom:language',{detail:code}));
 }
 function download(){
  if(open.disabled)return;
