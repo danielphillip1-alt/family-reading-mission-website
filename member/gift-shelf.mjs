@@ -2,7 +2,7 @@ import {giftArt} from './gift-shelf-art.mjs';
 import {coverFile} from './approved-covers.mjs';
 
 export const bundleBooks = [
- ['zachary-my-unique-hat-2026-11','Zachary and the “My Unique” Hat','Zachary und der „My Unique“-Hut','Zachary e o Chapéu My Unique'],
+ ['zachary-my-unique-hat-2026-11','Zachary and the “My Unique” Hat','Zachary und der „My Unique“-Hut','Zachary e o Boné “My Unique”'],
  ['zachary-school-that-believed-in-him','Zachary and the School That Believed in Him','Zachary und die Schule, die an ihn glaubte','Zachary e a Escola que Acreditou Nele'],
  ['zachary-school-that-made-room','Zachary and the School That Made Room','Zachary und die Schule, die Platz machte','Zachary e a Escola que Abriu Espaço'],
  ['zachary-biggest-lesson-yet','Zachary and the Biggest Lesson Yet','Zachary und die größte Lektion','Zachary e a Maior Lição'],
