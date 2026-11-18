@@ -92,7 +92,7 @@ stage.addEventListener('touchend',e=>{if(multi||(window.visualViewport&&visualVi
 let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{layout();show(num);},150);});
 if(!window.pdfjsLib){fail();return;}
 pdfjsLib.GlobalWorkerOptions.workerSrc=${JSON.stringify(PDFJS+'/pdf.worker.min.js')};
-task=pdfjsLib.getDocument({url:URL_,rangeChunkSize:524288,disableAutoFetch:true,disableStream:true});
+task=pdfjsLib.getDocument({url:URL_,rangeChunkSize:2097152,disableAutoFetch:false,disableStream:false});
 task.promise.then(d=>{doc=d;let start=1;try{start=Number(localStorage.getItem(KEY))||1;}catch(e){}if(start>=d.numPages)start=1;show(start);}).catch(fail);
 })();
 </script></body></html>`;
