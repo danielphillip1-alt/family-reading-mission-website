@@ -4,7 +4,7 @@ import {coverFile} from './approved-covers.mjs';
 export const bundleBooks = [
  ['zachary-my-unique-hat-2026-11','Zachary and the “My Unique” Hat','Zachary und der „My Unique“-Hut','Zachary e o Boné “My Unique”'],
  ['zachary-school-that-believed-in-him','Zachary and the School That Believed in Him','Zachary und die Schule, die an ihn glaubte','Zachary e a Escola que Acreditou Nele'],
- ['zachary-school-that-made-room','Zachary and the School That Made Room','Zachary und die Schule, die Platz machte','Zachary e a Escola que Abriu Espaço'],
+ ['zachary-school-that-made-room','Zachary and the School That Made Room','Zachary und die Schule, die Platz für alle schuf','Zachary e a Escola Que Criou Espaço Para Todos'],
  ['zachary-biggest-lesson-yet','Zachary and the Biggest Lesson Yet','Zachary und die größte Lektion','Zachary e a Maior Lição'],
  ['zachary-foundation-of-something-great','Zachary and the Foundation of Something Great','Zachary und das Fundament für etwas Großes','Zachary e os Alicerces de Algo Grandioso'],
  ['zachary-night-everyone-belonged','Zachary and the Night Everyone Belonged','Zachary und die Nacht, in der alle dazugehörten','Zachary e a Noite em que Todos Pertenceram'],
