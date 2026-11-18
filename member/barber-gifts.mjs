@@ -1,7 +1,8 @@
 import {createHash,createHmac,randomBytes} from 'node:crypto';
 import {sendTransactionalMail,mailConfigured} from './mail.mjs';
 import {bundleTitle,isBundleBook,shelfPage} from './gift-shelf.mjs';
-import {approvedLanguageBooks,sendApprovedPdf,sendLanguageZip} from './storybook-gifts.mjs';
+import {approvedLanguageBooks,sendApprovedPdf,sendLanguageZip,freeLibrary,freeBookInfo,sendFreeBook} from './storybook-gifts.mjs';
+import {readerPage,shelfScript} from './free-reader.mjs';
 
 const LINK='plink_1UcgIURuZKBP2B3nCAGISBfm';
 const LEGACY_LINK='plink_1UboGGRuZKBP2B3nzmcAPiQL';
@@ -111,6 +112,30 @@ const path=url.pathname,id=url.searchParams.get('session_id'),gift=url.searchPar
 // Barbershop QR gift (owner-approved free gift): the parent scans the QR on the
 // barber's wall, the child picks one of six languages on the gift page, and
 // "Open Your Gift" downloads that language's approved, numbered bundle.
+// Read online: the gift pages show every approved book per language; children
+// read in the browser (page by page) or save a single book.
+if(path==='/barber/free-library'&&req.method==='GET'){
+ const data=await freeLibrary(pool,[...giftLanguages]);
+ res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'public, max-age=60','Access-Control-Allow-Origin':'*','X-Content-Type-Options':'nosniff'});
+ res.end(JSON.stringify({languages:data}));return true;
+}
+if(path==='/barber/shelf.js'&&req.method==='GET'){
+ res.writeHead(200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'public, max-age=300','Access-Control-Allow-Origin':'*','X-Content-Type-Options':'nosniff'});
+ res.end(shelfScript);return true;
+}
+if((path==='/barber/free-book.pdf'||path==='/barber/read')&&(req.method==='GET'||req.method==='HEAD')){
+ const lang=url.searchParams.get('language');
+ if(!giftLanguages.has(lang)||!isBundleBook(slug)){send(res,404,'Book unavailable','text/plain; charset=utf-8');return true;}
+ if(path==='/barber/read'){
+  const book=await freeBookInfo(pool,slug,lang);
+  if(!book){send(res,404,page('Book unavailable','<p>This book is not available in this language yet.</p>'));return true;}
+  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'public, max-age=300','Referrer-Policy':'strict-origin','X-Content-Type-Options':'nosniff','X-Robots-Tag':'noindex, nofollow'});
+  res.end(req.method==='HEAD'?'':readerPage(book));return true;
+ }
+ try{await sendFreeBook(pool,req,res,slug,lang,url.searchParams.get('download')==='1');}
+ catch(e){console.error('Free book failed',e?.code||e?.name);if(!res.headersSent)send(res,500,'Book unavailable','text/plain');else res.destroy();}
+ return true;
+}
 if(path==='/barber/free-bundle.zip'&&req.method==='GET'){
  const lang=url.searchParams.get('language');
  if(!giftLanguages.has(lang)){send(res,400,'Choose English, Deutsch, Français, Español, Türkçe or Português.','text/plain; charset=utf-8');return true;}

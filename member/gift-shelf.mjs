@@ -111,3 +111,6 @@ export function shelfPage({lang,available,otherEditions,link,order}){
  }).join('');
  return '<!doctype html><html lang="'+lang+'"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow"><title>'+w.title+'</title><style>'+style+'</style><main><img class="hero" alt="" src="'+giftArt['gift-hero']+'"><header class="intro"><h1>'+w.title+'</h1><p>'+w.intro+'</p><p class="save">'+w.save+'</p></header><ul class="books">'+cards+'</ul><footer>Authors On A Mission</footer></main></html>';
 }
+// Title and series position of a book in a given language (free reading shelf).
+export const localizedTitle=(slug,lang)=>translatedTitles[lang]?.[slug]||bundleTitle(slug,lang);
+export const seriesPosition=slug=>readingOrder[slug]||[slug.startsWith('emir-')?'Emir':'Zachary',0];

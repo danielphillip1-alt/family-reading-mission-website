@@ -5,7 +5,7 @@ import QRCode from 'qrcode';
 import {sendTransactionalMail,mailConfigured} from './mail.mjs';
 import {giftArt} from './gift-shelf-art.mjs';
 import {storybookAdminPage} from './storybook-admin.mjs';
-import {shelfPage,isBundleBook,bundleTitle} from './gift-shelf.mjs';
+import {shelfPage,isBundleBook,bundleTitle,localizedTitle,seriesPosition} from './gift-shelf.mjs';
 import {streamBookZip,bookZipByteLength,bookZipOrder,bookZipName} from './zip-library.mjs';
 import {privateZipFile,streamCachedZip,cachedZipFile} from './private-zip-cache.mjs';
 import {coverFile} from './approved-covers.mjs';
@@ -340,6 +340,61 @@ export async function sendLanguageZip(pool,res,lang){
  if(ready){await streamCachedZip(ready,res);return;}
  try{await streamBookZip({res,language:lang,books,readChunks:book=>bookChunks(pool,book,lang)});}
  finally{buildArchive(pool,books,lang,plan).catch(error=>console.error('Private ZIP cache build failed',error?.message||error?.name));}
+}
+// Free QR gift shelf: every approved edition per language, titled and in
+// reading order, so children can read online or save single books.
+export async function freeLibrary(pool,codes){
+ const out=[];
+ for(const lang of codes){
+  const books=await languageEditions(pool,lang);
+  out.push({language:lang,label:languages[lang],books:books.map(b=>{const [series,number]=seriesPosition(b.slug);return {slug:b.slug,title:localizedTitle(b.slug,lang),series,number,size:b.size};})});
+ }
+ return out;
+}
+export async function freeBookInfo(pool,slug,lang){
+ const book=(await languageEditions(pool,lang)).find(b=>b.slug===slug);
+ if(!book)return null;
+ const [series,number]=seriesPosition(slug);
+ return {slug,lang,title:localizedTitle(slug,lang),series,number,size:book.size};
+}
+// One approved edition with HTTP range support: the online reader fetches
+// only the pages being shown instead of the whole 15-28 MB file.
+export async function sendFreeBook(pool,req,res,slug,lang,download){
+ const book=(await languageEditions(pool,lang)).find(b=>b.slug===slug);
+ if(!book){send(res,404,'Book unavailable','text/plain');return;}
+ const size=book.size,etag='"'+book.sha256+'"';
+ const base={'Content-Type':'application/pdf','Accept-Ranges':'bytes','ETag':etag,'Cache-Control':'public, max-age=3600',
+  'X-Content-Type-Options':'nosniff','Referrer-Policy':'strict-origin','X-Robots-Tag':'noindex, nofollow',
+  'Content-Disposition':(download?'attachment':'inline')+'; filename="'+bookZipName(slug,lang).split('/').pop()+'"'};
+ if(req.headers['if-none-match']===etag){res.writeHead(304,base);res.end();return;}
+ let start=0,end=size-1,status=200;
+ const m=/^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range||'').trim());
+ if(m&&!download&&(m[1]!==''||m[2]!=='')){
+  if(m[1]===''){start=Math.max(0,size-Number(m[2]));}
+  else{start=Number(m[1]);if(m[2]!=='')end=Math.min(size-1,Number(m[2]));}
+  if(start>end||start>=size){res.writeHead(416,{...base,'Content-Range':'bytes */'+size});res.end();return;}
+  status=206;
+ }
+ const head={...base,'Content-Length':end-start+1};
+ if(status===206)head['Content-Range']='bytes '+start+'-'+end+'/'+size;
+ res.writeHead(status,head);
+ if(req.method==='HEAD'){res.end();return;}
+ let pos=start;
+ while(pos<=end&&!res.destroyed){
+  let bytes;
+  if(book.storage_key){
+   bytes=(await pool.query('SELECT substring(pdf_content FROM $3 FOR $4) AS bytes FROM aom_book_files WHERE storage_key=$1 AND sha256=$2',
+    [book.storage_key,book.sha256,pos+1,Math.min(chunkSize,end-pos+1)])).rows[0]?.bytes;
+  }else{
+   const part=Math.floor(pos/chunkSize);
+   const row=(await pool.query('SELECT bytes FROM aom_storybook_pdf_parts WHERE slug=$1 AND language=$2 AND part=$3',[slug,lang,part])).rows[0];
+   bytes=row?.bytes?.subarray(pos-part*chunkSize,Math.min(row.bytes.length,end-part*chunkSize+1));
+  }
+  if(!bytes?.length){res.destroy();return;}
+  pos+=bytes.length;
+  if(!res.write(bytes)&&!res.destroyed)await once(res,'drain',{signal:AbortSignal.timeout(15000)});
+ }
+ res.end();
 }
 export async function sendApprovedPdf(pool,res,slug,lang,inline=false){
  await deliverFile(pool,res,slug,lang,inline);
