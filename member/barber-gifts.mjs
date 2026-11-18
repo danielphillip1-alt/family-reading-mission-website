@@ -2,7 +2,7 @@ import {createHash,createHmac,randomBytes} from 'node:crypto';
 import {sendTransactionalMail,mailConfigured} from './mail.mjs';
 import {bundleTitle,isBundleBook,shelfPage} from './gift-shelf.mjs';
 import {approvedLanguageBooks,sendApprovedPdf,sendLanguageZip,freeLibrary,freeBookInfo,sendFreeBook} from './storybook-gifts.mjs';
-import {readerPage,shelfScript,pdfjsAsset,PDFJS_VERSION} from './free-reader.mjs';
+import {readerPage,shelfScript,pdfjsAsset,PDFJS_VERSIONS} from './free-reader.mjs';
 
 const LINK='plink_1UcgIURuZKBP2B3nCAGISBfm';
 const LEGACY_LINK='plink_1UboGGRuZKBP2B3nzmcAPiQL';
@@ -119,11 +119,20 @@ if(path==='/barber/free-library'&&req.method==='GET'){
  res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'public, max-age=60','Access-Control-Allow-Origin':'*','X-Content-Type-Options':'nosniff'});
  res.end(JSON.stringify({languages:data}));return true;
 }
-if(path.startsWith('/barber/pdfjs/'+PDFJS_VERSION+'/')&&req.method==='GET'){
- const body=await pdfjsAsset(path.split('/').pop());
+if(path.startsWith('/barber/pdfjs/')&&req.method==='GET'){
+ const [, , , version, name]=path.split('/');
+ const body=Object.hasOwn(PDFJS_VERSIONS,version)?await pdfjsAsset(name,version):null;
  if(!body){send(res,404,'Not found','text/plain');return true;}
  res.writeHead(200,{'Content-Type':'text/javascript; charset=utf-8','Content-Length':body.length,'Cache-Control':'public, max-age=31536000, immutable','X-Content-Type-Options':'nosniff'});
  res.end(body);return true;
+}
+// The reader reports when a book could not be shown (book, step, browser only).
+if(path==='/barber/reader-error'&&req.method==='POST'){
+ let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)break;}
+ let info={};try{info=JSON.parse(raw.slice(0,4096));}catch(e){}
+ const pick=k=>String(info[k]??'').replace(/[\r\n]+/g,' ').slice(0,k==='ua'?250:300);
+ console.warn('Free reader could not show a book:',JSON.stringify({slug:pick('slug'),language:pick('language'),stage:pick('stage'),message:pick('message'),build:pick('build'),ua:pick('ua')}));
+ res.writeHead(204,{'Cache-Control':'no-store'});res.end();return true;
 }
 if(path==='/barber/shelf.js'&&req.method==='GET'){
  res.writeHead(200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'public, max-age=300','Access-Control-Allow-Origin':'*','X-Content-Type-Options':'nosniff'});

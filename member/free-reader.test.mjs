@@ -38,3 +38,15 @@ test('library, reader and shelf', async()=>{
  const html=readerPage({slug:SLUG,lang:'tr',title:'<b>x</b>',series:'Zachary',number:1});
  assert.ok(!html.includes('<b>x</b>'));assert.doesNotThrow(()=>new Function(html.split('<script>')[1].split('</script>')[0]));
 });
+test('both PDF.js builds are served; reader reports failures', async()=>{
+ for(const v of ['3.11.174','2.16.105-legacy'])for(const f of ['pdf.min.js','pdf.worker.min.js']){
+  const r=await call('/barber/pdfjs/'+v+'/'+f);assert.equal(r.s,200);assert.ok(r.b.length>300000);
+ }
+ assert.equal((await call('/barber/pdfjs/9.9.9/pdf.min.js')).s,404);
+ assert.notEqual((await call('/barber/pdfjs/3.11.174/../../server.mjs')).s,200);assert.equal((await call('/barber/pdfjs/3.11.174/server.mjs')).s,404);
+ const reader=(await call('/barber/read?slug='+SLUG+'&language=en')).b.toString();
+ assert.ok(reader.includes('2.16.105-legacy')&&reader.includes('isEvalSupported:false'));
+ const chunks=[];const res={headersSent:false,status:0,writeHead(s){this.status=s;},setHeader(){},write(){},end(){},destroy(){}};
+ const req={method:'POST',headers:{},async *[Symbol.asyncIterator](){yield Buffer.from(JSON.stringify({slug:SLUG,language:'en',stage:'open',message:'x',ua:'test'}));}};
+ await handleBarber({req,res,url:new URL('https://x/barber/reader-error'),pool});assert.equal(res.status,204);
+});

@@ -2,25 +2,29 @@
 // tablet or computer (PDF.js renders the pages, so Android phones read in the
 // browser instead of downloading), plus the language shelf for the gift pages.
 import {readFile} from 'node:fs/promises';
-// PDF.js (Apache-2.0, vendor/pdfjs-3.11.174) is served from this backend, not a public CDN.
+// PDF.js (Apache-2.0) is served from this backend, not a public CDN. Phones that
+// support it get 3.11.174; older phones and in-app browsers (before iOS 15.4 /
+// Chrome 92) get the 2.16.105 legacy build, which runs back to iOS 12.
+export const PDFJS_VERSIONS={'3.11.174':'pdfjs-3.11.174','2.16.105-legacy':'pdfjs-2.16.105-legacy'};
 export const PDFJS_VERSION='3.11.174';
-const PDFJS='/barber/pdfjs/'+PDFJS_VERSION;
-const pdfjsFiles={'pdf.min.js':'pdf.min.js','pdf.worker.min.js':'pdf.worker.min.js'};
+const PDFJS_MODERN='/barber/pdfjs/3.11.174',PDFJS_LEGACY='/barber/pdfjs/2.16.105-legacy';
+const pdfjsFiles=new Set(['pdf.min.js','pdf.worker.min.js']);
 const pdfjsCache=new Map();
-export async function pdfjsAsset(name){
- if(!Object.hasOwn(pdfjsFiles,name))return null;
- if(!pdfjsCache.has(name))pdfjsCache.set(name,await readFile(new URL('./vendor/pdfjs-'+PDFJS_VERSION+'/'+pdfjsFiles[name],import.meta.url)));
- return pdfjsCache.get(name);
+export async function pdfjsAsset(name,version=PDFJS_VERSION){
+ if(!pdfjsFiles.has(name)||!Object.hasOwn(PDFJS_VERSIONS,version))return null;
+ const key=version+'/'+name;
+ if(!pdfjsCache.has(key))pdfjsCache.set(key,await readFile(new URL('./vendor/'+PDFJS_VERSIONS[version]+'/'+name,import.meta.url)));
+ return pdfjsCache.get(key);
 }
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 export const readerWords={
- en:{back:'Books',download:'Download',prev:'Previous page',next:'Next page',page:'Page',opening:'Opening the book…',failed:'This book could not be opened here. You can download it instead.',book:'Book'},
- de:{back:'Bücher',download:'Herunterladen',prev:'Vorherige Seite',next:'Nächste Seite',page:'Seite',opening:'Das Buch wird geöffnet …',failed:'Dieses Buch konnte hier nicht geöffnet werden. Du kannst es stattdessen herunterladen.',book:'Buch'},
- fr:{back:'Livres',download:'Télécharger',prev:'Page précédente',next:'Page suivante',page:'Page',opening:'Ouverture du livre…',failed:'Ce livre n’a pas pu s’ouvrir ici. Tu peux le télécharger à la place.',book:'Livre'},
- es:{back:'Libros',download:'Descargar',prev:'Página anterior',next:'Página siguiente',page:'Página',opening:'Abriendo el libro…',failed:'Este libro no se ha podido abrir aquí. Puedes descargarlo.',book:'Libro'},
- tr:{back:'Kitaplar',download:'İndir',prev:'Önceki sayfa',next:'Sonraki sayfa',page:'Sayfa',opening:'Kitap açılıyor…',failed:'Bu kitap burada açılamadı. Bunun yerine indirebilirsin.',book:'Kitap'},
- 'pt-PT':{back:'Livros',download:'Descarregar',prev:'Página anterior',next:'Página seguinte',page:'Página',opening:'A abrir o livro…',failed:'Não foi possível abrir este livro aqui. Podes descarregá-lo.',book:'Livro'}
+ en:{back:'Books',download:'Download',prev:'Previous page',next:'Next page',page:'Page',opening:'Opening the book…',failed:'Tap below to open the book.',open:'Open the book',book:'Book'},
+ de:{back:'Bücher',download:'Herunterladen',prev:'Vorherige Seite',next:'Nächste Seite',page:'Seite',opening:'Das Buch wird geöffnet …',failed:'Tippe unten, um das Buch zu öffnen.',open:'Buch öffnen',book:'Buch'},
+ fr:{back:'Livres',download:'Télécharger',prev:'Page précédente',next:'Page suivante',page:'Page',opening:'Ouverture du livre…',failed:'Touche le bouton ci-dessous pour ouvrir le livre.',open:'Ouvrir le livre',book:'Livre'},
+ es:{back:'Libros',download:'Descargar',prev:'Página anterior',next:'Página siguiente',page:'Página',opening:'Abriendo el libro…',failed:'Toca abajo para abrir el libro.',open:'Abrir el libro',book:'Libro'},
+ tr:{back:'Kitaplar',download:'İndir',prev:'Önceki sayfa',next:'Sonraki sayfa',page:'Sayfa',opening:'Kitap açılıyor…',failed:'Kitabı açmak için aşağıya dokun.',open:'Kitabı aç',book:'Kitap'},
+ 'pt-PT':{back:'Livros',download:'Descarregar',prev:'Página anterior',next:'Página seguinte',page:'Página',opening:'A abrir o livro…',failed:'Toca abaixo para abrir o livro.',open:'Abrir o livro',book:'Livro'}
 };
 
 export function readerPage(book){
@@ -51,10 +55,11 @@ footer button:disabled{opacity:.3;cursor:default}#count{font-size:18px;font-weig
 <main id="stage"><img id="cover" src="/storybook/cover?${esc(q)}" alt="" style="max-width:100%;max-height:100%;border-radius:6px;box-shadow:0 8px 28px #0008"><canvas id="page" role="img" aria-label="${esc(book.title)}" style="display:none"></canvas></main>
 <footer><button id="prev" type="button" aria-label="${esc(w.prev)}">‹</button><span id="count" aria-live="polite"></span><button id="next" type="button" aria-label="${esc(w.next)}">›</button></footer>
 <div id="status" style="top:auto;bottom:calc(var(--bottom,74px) + 12px);inset-inline:0;font-size:16px;pointer-events:none"><span style="background:#0d4536e6;padding:8px 16px;border-radius:999px">${esc(w.opening)}</span></div>
-<script src="${PDFJS}/pdf.min.js"></script>
 <script>
 (()=>{'use strict';
-const W=${JSON.stringify(w)},URL_=${JSON.stringify(pdf)},KEY='aom_page_'+${JSON.stringify(book.slug+':'+book.lang)};
+const W=${JSON.stringify(w)},URL_=${JSON.stringify(pdf)},KEY='aom_page_'+${JSON.stringify(book.slug+':'+book.lang)},SLUG=${JSON.stringify(book.slug)},LANG=${JSON.stringify(book.lang)};
+const MODERN=(()=>{try{if(/[?&]legacy=1/.test(location.search)||typeof [].at!=='function'||typeof structuredClone!=='function')return false;new Function('class A{#p(){return 1}}');return true;}catch(e){return false;}})();
+const BUILD=MODERN?${JSON.stringify(PDFJS_MODERN)}:${JSON.stringify(PDFJS_LEGACY)};
 const canvas=document.getElementById('page'),stage=document.getElementById('stage'),status=document.getElementById('status');
 const prev=document.getElementById('prev'),next=document.getElementById('next'),count=document.getElementById('count');
 const back=document.getElementById('back');
@@ -63,7 +68,16 @@ if(innerWidth<380)document.querySelector('#dl .lbl').remove();
 function layout(){document.documentElement.style.setProperty('--top',document.querySelector('header').offsetHeight+'px');document.documentElement.style.setProperty('--bottom',document.querySelector('footer').offsetHeight+'px');}
 layout();
 let doc=null,num=1,busy=false,queued=null,task=null;
-function fail(){status.removeAttribute('style');const cov=document.getElementById('cover');if(cov)cov.remove();status.replaceChildren();const p=document.createElement('p');p.textContent=W.failed;const a=document.createElement('a');a.href=URL_+'&download=1';a.textContent='⬇ '+W.download;status.append(p,a);status.style.display='flex';}
+let failed=false,first=false;
+function report(stage,msg){try{navigator.sendBeacon&&navigator.sendBeacon('/barber/reader-error',JSON.stringify({slug:SLUG,language:LANG,stage:stage,message:String(msg||'').slice(0,300),build:BUILD,ua:navigator.userAgent.slice(0,250)}));}catch(e){}}
+function fail(stage,err){
+ if(failed||first)return;failed=true;report(stage,err&&(err.message||err.name||err));
+ status.removeAttribute('style');while(status.firstChild)status.removeChild(status.firstChild);
+ const p=document.createElement('p');p.textContent=W.failed;
+ const o=document.createElement('a');o.href=URL_;o.textContent='📖 '+W.open;
+ const a=document.createElement('a');a.href=URL_+'&download=1';a.textContent='⬇ '+W.download;a.style.background='#fff7e3';
+ status.append(p,o,a);status.style.display='flex';status.style.background='rgba(10,52,40,.82)';
+}
 async function show(n){
  if(!doc)return;n=Math.max(1,Math.min(doc.numPages,n));
  if(busy){queued=n;return;}busy=true;num=n;
@@ -75,11 +89,11 @@ async function show(n){
   await page.render({canvasContext:off.getContext('2d'),viewport:vp}).promise;
   canvas.width=off.width;canvas.height=off.height;canvas.getContext('2d').drawImage(off,0,0);
   canvas.style.width=Math.floor(base.width*fit)+'px';canvas.style.height=Math.floor(base.height*fit)+'px';
-  status.style.display='none';const cov=document.getElementById('cover');if(cov)cov.remove();canvas.style.display='block';
+  first=true;status.style.display='none';const cov=document.getElementById('cover');if(cov)cov.remove();canvas.style.display='block';
   count.textContent=W.page+' '+n+' / '+doc.numPages;prev.disabled=n<=1;next.disabled=n>=doc.numPages;
   try{localStorage.setItem(KEY,String(n));}catch(e){}
   if(n<doc.numPages)doc.getPage(n+1).catch(()=>{});
- }catch(e){fail();}
+ }catch(e){fail('render',e);}
  busy=false;if(queued!==null){const q=queued;queued=null;show(q);}
 }
 prev.addEventListener('click',()=>show(num-1));next.addEventListener('click',()=>show(num+1));
@@ -90,10 +104,18 @@ stage.addEventListener('touchend',e=>{if(multi||(window.visualViewport&&visualVi
  if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.3)show(num+(dx<0?1:-1));
  else if(Math.abs(dx)<10&&Math.abs(dy)<10){const r=stage.getBoundingClientRect();if(t.clientX>r.left+r.width*.66)show(num+1);else if(t.clientX<r.left+r.width*.34)show(num-1);}},{passive:true});
 let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{layout();show(num);},150);});
-if(!window.pdfjsLib){fail();return;}
-pdfjsLib.GlobalWorkerOptions.workerSrc=${JSON.stringify(PDFJS+'/pdf.worker.min.js')};
-task=pdfjsLib.getDocument({url:URL_,rangeChunkSize:2097152,disableAutoFetch:false,disableStream:false});
-task.promise.then(d=>{doc=d;let start=1;try{start=Number(localStorage.getItem(KEY))||1;}catch(e){}if(start>=d.numPages)start=1;show(start);}).catch(fail);
+setTimeout(()=>{if(!first)fail('slow','no page after 25 s');},25000);
+const lib=document.createElement('script');lib.src=BUILD+'/pdf.min.js';
+lib.onerror=()=>fail('library','script failed to load');
+lib.onload=()=>{
+ if(!window.pdfjsLib){fail('library','pdfjsLib missing');return;}
+ try{
+  pdfjsLib.GlobalWorkerOptions.workerSrc=BUILD+'/pdf.worker.min.js';
+  task=pdfjsLib.getDocument({url:URL_,rangeChunkSize:2097152,disableAutoFetch:false,disableStream:false,isEvalSupported:false});
+  task.promise.then(d=>{doc=d;let start=1;try{start=Number(localStorage.getItem(KEY))||1;}catch(e){}if(start>=d.numPages)start=1;show(start);}).catch(e=>fail('open',e));
+ }catch(e){fail('init',e);}
+};
+document.head.appendChild(lib);
 })();
 </script></body></html>`;
 }
@@ -120,7 +142,7 @@ const sel=document.querySelector('select#language,select[name="language"]');
 if(sel&&order.includes(sel.value))lang=sel.value;
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
 function render(){
- if(!data)return;const ui=T[lang]||T.en;host.replaceChildren();host.lang=lang;
+ if(!data)return;const ui=T[lang]||T.en;while(host.firstChild)host.removeChild(host.firstChild);host.lang=lang;
  const head=el('div','aom-head');head.append(el('h2','',ui.title),el('p','aom-intro',ui.intro));host.append(head);
  const rows=[...data].filter(r=>r.books.length).sort((a,b)=>(a.language===lang?-1:b.language===lang?1:order.indexOf(a.language)-order.indexOf(b.language)));
  rows.forEach((row,i)=>{
