@@ -1,7 +1,17 @@
 // Free QR gift: read any approved book online, page by page, on any phone,
 // tablet or computer (PDF.js renders the pages, so Android phones read in the
 // browser instead of downloading), plus the language shelf for the gift pages.
-const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174';
+import {readFile} from 'node:fs/promises';
+// PDF.js (Apache-2.0, vendor/pdfjs-3.11.174) is served from this backend, not a public CDN.
+export const PDFJS_VERSION='3.11.174';
+const PDFJS='/barber/pdfjs/'+PDFJS_VERSION;
+const pdfjsFiles={'pdf.min.js':'pdf.min.js','pdf.worker.min.js':'pdf.worker.min.js'};
+const pdfjsCache=new Map();
+export async function pdfjsAsset(name){
+ if(!Object.hasOwn(pdfjsFiles,name))return null;
+ if(!pdfjsCache.has(name))pdfjsCache.set(name,await readFile(new URL('./vendor/pdfjs-'+PDFJS_VERSION+'/'+pdfjsFiles[name],import.meta.url)));
+ return pdfjsCache.get(name);
+}
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 export const readerWords={
