@@ -61,7 +61,8 @@ const copy={
 const codes=order.map(x=>x[0]);
 const wanted=q.get('language')==='pt'?'pt-PT':q.get('language');
 const device=(navigator.language||'').toLowerCase();
-let lang=codes.includes(wanted)?wanted:(codes.find(c=>device===c.toLowerCase())||codes.find(c=>device.split('-')[0]===c.split('-')[0])||'en');
+let remembered='';try{remembered=localStorage.getItem('aom_gift_language')||'';}catch(e){}
+let lang=codes.includes(wanted)?wanted:codes.includes(remembered)?remembered:(codes.find(c=>device===c.toLowerCase())||codes.find(c=>device.split('-')[0]===c.split('-')[0])||'en');
 let counts=null;
 const overlay=document.querySelector('.lang-overlay'),grid=document.querySelector('.lang-panel .grid');
 const buttons=[];
@@ -83,7 +84,7 @@ function drawNames(){
  const line=document.createElement('p');line.style.margin='0';line.append(lead,sender,tail);nameplate.append(line);nameplate.style.display='flex';
 }
 function choose(code){
- lang=code;document.documentElement.lang=code;
+ lang=code;document.documentElement.lang=code;try{localStorage.setItem('aom_gift_language',code);}catch(e){}
  for(const b of buttons)b.setAttribute('aria-pressed',String(b.dataset.lang===code));
  document.getElementById('panelTitle').textContent=copy[code].title;
  openBig.textContent='🎁 '+copy[code].open;open.setAttribute('aria-label',copy[code].open);
