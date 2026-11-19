@@ -110,8 +110,8 @@ async function show(n){
   count.textContent=W.page+' '+n+' / '+doc.numPages;prev.disabled=n<=1;next.disabled=n>=doc.numPages;
   try{localStorage.setItem(KEY,String(n));}catch(e){}
   setTimeout(()=>{prepare(n+1);prepare(n-1);},50);
- }catch(e){fail('render',e);}
- busy=false;if(queued!==null){const q=queued;queued=null;show(q);}
+ }catch(e){if(!show.retried){show.retried=true;ready.delete(n);busy=false;setTimeout(()=>show(n),1500);return;}fail('render',e);}
+ show.retried=false;busy=false;if(queued!==null){const q=queued;queued=null;show(q);}
 }
 function step(d){if(!doc)return;target=Math.max(1,Math.min(doc.numPages,target+d));show(target);}
 prev.addEventListener('click',()=>step(-1));next.addEventListener('click',()=>step(1));
@@ -142,27 +142,27 @@ document.head.appendChild(lib);
 // Language shelf for the gift pages: one row per language, the child's chosen
 // language first; every cover opens the reader and every book can be saved.
 export const shelfScript=String.raw`(()=>{'use strict';
-const me=document.currentScript,backend=new URL(me.src).origin;
+const me=document.currentScript,CFG=window.AOM_SHELF||{},backend=CFG.backend||new URL(me.src).origin;
 const host=document.getElementById('aom-shelf');if(!host)return;
 const order=['en','de','fr','es','tr','pt-PT'];
 const names={en:'🇬🇧 English',de:'🇩🇪 Deutsch',fr:'🇫🇷 Français',es:'🇪🇸 Español',tr:'🇹🇷 Türkçe','pt-PT':'🇵🇹 Português'};
 const T={
- en:{title:'Read the books right here',intro:'Find your language, tap a book and start reading. You can also download any book to keep.',read:'Read',dl:'Download',books:'books',book:'Book'},
- de:{title:'Lies die Bücher gleich hier',intro:'Such deine Sprache, tippe auf ein Buch und fang an zu lesen. Du kannst jedes Buch auch herunterladen.',read:'Lesen',dl:'Herunterladen',books:'Bücher',book:'Buch'},
- fr:{title:'Lis les livres ici même',intro:'Trouve ta langue, touche un livre et commence à lire. Tu peux aussi télécharger chaque livre.',read:'Lire',dl:'Télécharger',books:'livres',book:'Livre'},
- es:{title:'Lee los libros aquí mismo',intro:'Busca tu idioma, toca un libro y empieza a leer. También puedes descargar cualquier libro.',read:'Leer',dl:'Descargar',books:'libros',book:'Libro'},
- tr:{title:'Kitapları hemen burada oku',intro:'Dilini bul, bir kitaba dokun ve okumaya başla. İstediğin kitabı indirip saklayabilirsin de.',read:'Oku',dl:'İndir',books:'kitap',book:'Kitap'},
- 'pt-PT':{title:'Lê os livros aqui mesmo',intro:'Procura o teu idioma, toca num livro e começa a ler. Também podes descarregar qualquer livro.',read:'Ler',dl:'Descarregar',books:'livros',book:'Livro'}
+ en:{loading:'Loading the books…',title:'Read the books right here',intro:'Find your language, tap a book and start reading. You can also download any book to keep.',read:'Read',dl:'Download',books:'books',book:'Book'},
+ de:{loading:'Die Bücher werden geladen …',title:'Lies die Bücher gleich hier',intro:'Such deine Sprache, tippe auf ein Buch und fang an zu lesen. Du kannst jedes Buch auch herunterladen.',read:'Lesen',dl:'Herunterladen',books:'Bücher',book:'Buch'},
+ fr:{loading:'Chargement des livres…',title:'Lis les livres ici même',intro:'Trouve ta langue, touche un livre et commence à lire. Tu peux aussi télécharger chaque livre.',read:'Lire',dl:'Télécharger',books:'livres',book:'Livre'},
+ es:{loading:'Cargando los libros…',title:'Lee los libros aquí mismo',intro:'Busca tu idioma, toca un libro y empieza a leer. También puedes descargar cualquier libro.',read:'Leer',dl:'Descargar',books:'libros',book:'Libro'},
+ tr:{loading:'Kitaplar yükleniyor…',title:'Kitapları hemen burada oku',intro:'Dilini bul, bir kitaba dokun ve okumaya başla. İstediğin kitabı indirip saklayabilirsin de.',read:'Oku',dl:'İndir',books:'kitap',book:'Kitap'},
+ 'pt-PT':{loading:'A carregar os livros…',title:'Lê os livros aqui mesmo',intro:'Procura o teu idioma, toca num livro e começa a ler. Também podes descarregar qualquer livro.',read:'Ler',dl:'Descarregar',books:'livros',book:'Livro'}
 };
 const css=document.createElement('style');css.textContent=['#aom-shelf{max-width:1122px;margin:0 auto;padding:22px 0 30px;background:linear-gradient(#fff8e6,#fdf0cf);color:#123c31;font-family:Georgia,"Times New Roman",serif}','#aom-shelf .aom-head{padding:0 16px 6px;text-align:center}','#aom-shelf h2{margin:0 0 6px;font-size:clamp(22px,5.4vw,32px);color:#0d4536}','#aom-shelf .aom-intro{margin:0 auto;max-width:620px;font-size:clamp(15px,3.8vw,18px);line-height:1.4}','#aom-shelf .aom-row{margin:18px 0 0}','#aom-shelf h3{display:flex;align-items:baseline;gap:8px;margin:0 16px 8px;font-size:clamp(18px,4.6vw,23px);color:#0d4536}','#aom-shelf h3 small{font-size:14px;font-weight:400;color:#6b5a36}','#aom-shelf .aom-row.first h3{color:#8f1c1c}','#aom-shelf .aom-track{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 16px 12px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}','#aom-shelf .aom-card{flex:0 0 clamp(132px,36vw,170px);scroll-snap-align:start;display:flex;flex-direction:column;background:#fff;border-radius:14px;box-shadow:0 4px 14px rgba(70,45,0,.18);overflow:hidden}','#aom-shelf .aom-cover{position:relative;display:block;aspect-ratio:1/1;overflow:hidden;background:#f3ead2}','#aom-shelf .aom-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}','#aom-shelf .aom-meta{padding:8px 9px 0;flex:1}','#aom-shelf .aom-num{font-size:12px;color:#7a6438;text-transform:uppercase;letter-spacing:.03em}','#aom-shelf .aom-title{margin-top:3px;font-size:14px;line-height:1.25;font-weight:700;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}','#aom-shelf .aom-actions{display:flex;gap:6px;padding:9px}','#aom-shelf .aom-actions a{display:flex;align-items:center;justify-content:center;min-height:40px;border-radius:999px;text-decoration:none;font-weight:700;font-size:15px}','#aom-shelf .aom-read{flex:1;background:#0d4536;color:#fff}','#aom-shelf .aom-dl{flex:0 0 42px;background:#f3d27a;color:#3b2600}','#aom-shelf .aom-read:focus-visible,#aom-shelf .aom-dl:focus-visible,#aom-shelf .aom-cover:focus-visible{outline:3px solid #8f1c1c;outline-offset:2px}'].join('\n');
 document.head.append(css);
-let lang=host.dataset.language||'en',data=null;
+let lang=host.dataset.language||'en',data=Array.isArray(CFG.data)?CFG.data:null;
 const INAPP=/FBAN|FBAV|FB_IAB|Instagram|Line\/|GSA\/|Snapchat|TikTok|musical_ly|Twitter|Pinterest|; wv\)/i.test(navigator.userAgent);
 const sel=document.querySelector('select#language,select[name="language"]');
 if(sel&&order.includes(sel.value))lang=sel.value;
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
 function render(){
- if(!data)return;const ui=T[lang]||T.en;while(host.firstChild)host.removeChild(host.firstChild);host.lang=lang;
+ if(!data){while(host.firstChild)host.removeChild(host.firstChild);host.append(el('p','aom-intro',(T[lang]||T.en).loading));host.firstChild.style.cssText='text-align:center;padding:24px 16px';return;}const ui=T[lang]||T.en;while(host.firstChild)host.removeChild(host.firstChild);host.lang=lang;
  const head=el('div','aom-head');head.append(el('h2','',ui.title),el('p','aom-intro',ui.intro));host.append(head);
  const rows=[...data].filter(r=>r.books.length).sort((a,b)=>(a.language===lang?-1:b.language===lang?1:order.indexOf(a.language)-order.indexOf(b.language)));
  rows.forEach((row,i)=>{
@@ -174,7 +174,7 @@ function render(){
    const read=backend+'/barber/read?'+q,dl=backend+'/barber/free-book.pdf?'+q+(INAPP?'':'&download=1');
    const card=el('article','aom-card');card.setAttribute('role','listitem');
    const cover=el('a','aom-cover');cover.href=read;cover.setAttribute('aria-label',w.read+': '+b.title);
-   const img=el('img');img.loading='lazy';img.alt='';img.src=backend+'/storybook/cover?'+q;cover.append(img);
+   const img=el('img');img.loading='lazy';img.alt='';const live=backend+'/storybook/cover?'+q;img.src=CFG.covers?CFG.covers+b.slug+'.'+row.language+'.jpg':live;if(CFG.covers)img.onerror=()=>{img.onerror=null;img.src=live;};cover.append(img);
    const meta=el('div','aom-meta');meta.append(el('div','aom-num',b.series+' · '+w.book+' '+b.number),el('div','aom-title',b.title));
    const acts=el('div','aom-actions');const r=el('a','aom-read','📖 '+w.read);r.href=read;
    const d=el('a','aom-dl','⬇');d.href=dl;d.setAttribute('aria-label',w.dl+': '+b.title);d.title=w.dl;
@@ -183,7 +183,18 @@ function render(){
   sec.append(track);host.append(sec);
  });
 }
-fetch(backend+'/barber/free-library',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&Array.isArray(d.languages)){data=d.languages;render();}}).catch(()=>{});
+render();
+let tries=0;
+function refresh(){
+ tries++;
+ fetch(backend+'/barber/free-library',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{
+  if(d&&Array.isArray(d.languages)&&d.languages.some(l=>l.books&&l.books.length)){
+   const sig=x=>JSON.stringify((x||[]).map(l=>[l.language,(l.books||[]).map(b=>b.slug+'|'+b.title)]));
+   if(sig(d.languages)!==sig(data)){data=d.languages;render();}
+  }else if(tries<6)setTimeout(refresh,tries*4000);
+ }).catch(()=>{if(tries<6)setTimeout(refresh,tries*4000);});
+}
+refresh();
 document.addEventListener('aom:language',e=>{if(order.includes(e.detail)){lang=e.detail;render();}});
 if(sel)sel.addEventListener('change',()=>{if(order.includes(sel.value)){lang=sel.value;render();}});
 })();`;
