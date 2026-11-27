@@ -20,8 +20,8 @@
 <main>
 <section class="hero" aria-labelledby="title">
 <img src="storm.webp" width="1536" height="1024" fetchpriority="high" alt="Love clutches a wrapped medical book on a muddy road as lightning reveals a hippo near the reeds.">
-<video id="hero-trailer" loop playsinline preload="none" aria-hidden="true" data-src="trailer-4k.mp4"></video>
-<div class="trailer-controls"><button id="trailer-play" class="trailer-control" type="button" hidden>Play trailer</button><button id="trailer-sound" class="trailer-control" type="button" hidden>Turn sound on</button></div>
+<video id="hero-trailer" loop playsinline preload="none" aria-hidden="true" data-src="trailer-original-2026-11-27.mp4"></video>
+<div class="trailer-controls"><button id="trailer-play" class="trailer-control" type="button" hidden>Play trailer</button><button id="trailer-sound" class="trailer-control" type="button" hidden>Play with sound</button></div>
 <div class="wrap"><p class="chapter">A novel by Maimuna &amp; Daniel Phillip</p><h1 id="title">My Name <span>is Love</span></h1>
 <p class="tag">Autism made her journey difficult.<br>Love made giving up impossible.</p><div class="hero-actions"><a class="button" href="#book">Explore the book</a>
 <a class="button" href="https://buy.stripe.com/6oU9AV78w826bry9RTffy06">Buy Book</a></div></div>
@@ -58,7 +58,7 @@ function playTrailer() {
 }
 function updateControls() {
   playControl.textContent = trailer.paused ? 'Play trailer' : 'Pause trailer';
-  soundControl.textContent = trailer.muted ? 'Turn sound on' : 'Mute trailer';
+  soundControl.textContent = (trailer.muted || trailer.paused) ? 'Play with sound' : 'Mute trailer';
 }
 for (const event of ['play', 'pause', 'volumechange']) {
   trailer.addEventListener(event, updateControls);
@@ -68,8 +68,12 @@ playControl.addEventListener('click', () => {
   else trailer.pause();
 });
 soundControl.addEventListener('click', () => {
-  trailer.muted = !trailer.muted;
-  if (!trailer.muted && trailer.paused) playTrailer().catch(() => {});
+  if (trailer.muted || trailer.paused) {
+    trailer.muted = false;
+    playTrailer().catch(() => {});
+  } else {
+    trailer.muted = true;
+  }
 });
 playControl.hidden = false;
 soundControl.hidden = false;
