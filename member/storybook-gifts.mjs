@@ -196,7 +196,7 @@ const editorialReleases={'emir-meets-zachary':{en:'a35dcd79c4357fe79d658cd4a1788
 const releasedBookThree=Object.entries(editorialReleases['emir-meets-zachary']).map(([l,s])=>"('"+l+"','"+s+"')").join(',');
 const editoriallyLocked=(slug,lang)=>Object.hasOwn(editorialReleases,slug)&&!editorialReleases[slug][lang];
 async function fileFor(pool,slug,lang){
- if(editoriallyLocked(slug,lang))return null;
+ if(slug==='my-name-is-love'||editoriallyLocked(slug,lang))return null;
  const stored=(await pool.query('SELECT size,sha256 FROM aom_storybook_files WHERE slug=$1 AND language=$2 AND approved_at IS NOT NULL',[slug,lang])).rows[0];
  if(Object.hasOwn(editorialReleases,slug))return stored?.sha256===editorialReleases[slug][lang]?stored:undefined;
  if(stored)return stored;

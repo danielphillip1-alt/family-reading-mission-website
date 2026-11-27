@@ -24,6 +24,9 @@ export async function verifiedPaidCheckout(stripe,id){
  return {session,subscription,oneTime:false,accessEnd:new Date(end*1000)};
 }
 export async function handlePurchaseDelivery({req,res,url,stripe,pool}){
+ if(req.method==='GET' && ['/my-name-is-love/thanks','/my-name-is-love/download'].includes(url.pathname)){
+  return deliverNovel({res,url,stripe,pool});
+ }
  if(req.method!=='GET'||!['/purchase-success','/purchase-book','/purchase-manage'].includes(url.pathname))return false;
  const id=url.searchParams.get('session_id');
  let record;
@@ -81,4 +84,47 @@ export async function handlePurchaseDelivery({req,res,url,stripe,pool}){
  }).join('');
  const page=`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your books | Authors On A Mission</title><style>body{font:18px/1.5 system-ui,Arial,sans-serif;background:#fff3d7;color:#073d2e;padding:25px}main{max-width:580px;margin:auto;padding:26px;background:white;border-radius:16px}.button{display:block;margin:12px 0;padding:15px;border-radius:10px;background:#073d2e;color:white;text-decoration:none;font-weight:700}.preferred{background:#087d40}small{color:#53635b}</style><main><h1>Welcome to Authors On A Mission!</h1><p>Your ${record.oneTime?'one-time payment':'subscription payment'} has been verified. Download the available books in your selected language:</p>${links||'<p>Your book is being prepared. Please check back shortly.</p>'}<p><small>${record.oneTime?'You paid once for twelve months of access. No automatic renewal.':'Your monthly membership renews until cancelled.'} Keep this private checkout confirmation link to return while your access is active.</small></p>${record.oneTime?'':'<a href="/purchase-manage?session_id='+sid+'">Manage or cancel your monthly membership</a>'}</main></html>`;
  res.writeHead(200,{...common,'Content-Type':'text/html; charset=utf-8'});res.end(page);return true;
+}
+
+
+async function deliverNovel({res,url,stripe,pool}){
+ const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow'};
+ const reply=(status,message)=>{
+  res.writeHead(status,{...headers,'Content-Type':'text/plain; charset=utf-8'});
+  res.end(message);
+  return true;
+ };
+ const id=url.searchParams.get('session_id');
+ if(!id||!/^cs_live_[A-Za-z0-9]{20,180}$/.test(id))return reply(403,'A paid checkout is required.');
+ if(!stripe)return reply(503,'Payment verification is temporarily unavailable. Please refresh this page.');
+ let session;
+ try{
+  session=await stripe.checkout.sessions.retrieve(id);
+ }catch(error){
+  if(error?.code==='resource_missing')return reply(403,'A paid checkout is required.');
+  return reply(503,'Payment verification is temporarily unavailable. Please refresh this page.');
+ }
+ if(!session.livemode||session.payment_link!=='plink_1UfKD1RuZKBP2B3nYeZedYem'||session.mode!=='payment'||session.status!=='complete'||session.payment_status!=='paid'||session.currency!=='usd'||session.amount_total!==1299){
+  return reply(403,'Payment has not been confirmed for this book. If your payment is pending, refresh after Stripe confirms it.');
+ }
+ const {rows}=await pool.query(`SELECT f.size, string_agg(p.bytes, ''::bytea ORDER BY p.part) AS pdf
+  FROM aom_storybook_files f JOIN aom_storybook_pdf_parts p USING(slug,language)
+  WHERE f.slug=$1 AND f.language='en' AND f.approved_at IS NOT NULL AND f.sha256=$2
+  GROUP BY f.size`,['my-name-is-love','e68249fa7983211e1ee7af9b61f5072a944bc818f334d25d96db9887e679614c']);
+ const file=rows[0];
+ if(!file?.pdf?.length||file.pdf.length!==Number(file.size))return reply(503,'Your purchase is confirmed. The PDF is temporarily unavailable. Please refresh this page.');
+ if(url.pathname.endsWith('/download')){
+  res.writeHead(200,{...headers,'Content-Type':'application/pdf','Content-Length':file.pdf.length,
+   'Content-Disposition':'attachment; filename="My_Name_is_Love.pdf"'});
+  res.end(file.pdf);
+  return true;
+ }
+ res.writeHead(200,{...headers,'Content-Type':'text/html; charset=utf-8'});
+ res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Download My Name is Love | Authors On A Mission</title>
+  <style>body{margin:0;padding:10vh 6vw;background:#10100f;color:#fff2df;font:1rem/1.6 system-ui}main{max-width:36rem;margin:auto}h1{font:clamp(2.8rem,9vw,5rem)/1.02 Georgia;color:#ebc07d}a{display:inline-block;background:#ebc07d;color:#21150d;padding:.85rem 1.3rem;font-weight:700}a:focus-visible{outline:2px solid white;outline-offset:5px}</style>
+  <main><h1>My Name is Love</h1><p>Your payment is confirmed. Your book is ready to download.</p>
+  <a href="/my-name-is-love/download?session_id=${encodeURIComponent(id)}">Download the PDF</a>
+  <p>Save this private confirmation page if you’d like to download the book again.</p></main></html>`);
+ return true;
 }

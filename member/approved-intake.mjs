@@ -7,6 +7,7 @@ import {refreshGiftLibrary} from './storybook-gifts.mjs';
 // needed and nothing else can be uploaded. Bytes stay in memory until the
 // checksum matches; book content is never written to the public repository.
 const approved={
+ 'my-name-is-love:en':{size:996242,sha256:'e68249fa7983211e1ee7af9b61f5072a944bc818f334d25d96db9887e679614c'},
  'zachary-my-unique-hat-2026-11:en':{size:15080055,sha256:'f31050cdc85bda2e3b9c3787319bde64a8a772b6cc3d46b05d6de63bd675d1ad'},
  'zachary-my-unique-hat-2026-11:pt-PT':{size:12394782,sha256:'cf7b75b3b9838389639fec6cb85134244583c7c9e218f307ea9f63779645a68f'},
  // 2026-11-17: owner-approved English Emir editions, including Emir Book Three.
