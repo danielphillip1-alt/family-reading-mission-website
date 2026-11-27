@@ -83,7 +83,19 @@ if (!reducedMotion.matches) {
     if (error.name !== 'NotAllowedError' || reducedMotion.matches) return;
     trailer.muted = true;
     playTrailer().catch(() => {});
+    enableSoundOnFirstInteraction();
   });
+}
+function enableSoundOnFirstInteraction() {
+  const events = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
+  const unmute = event => {
+    events.forEach(name => document.removeEventListener(name, unmute, true));
+    if (event.target.closest && event.target.closest('.trailer-controls')) return;
+    if (!trailer.muted || reducedMotion.matches) return;
+    trailer.muted = false;
+    if (trailer.paused) playTrailer().catch(() => {});
+  };
+  events.forEach(name => document.addEventListener(name, unmute, true));
 }
 reducedMotion.addEventListener('change', event => {
   if (event.matches) trailer.pause();
